@@ -1,4 +1,4 @@
-#include <AccelStepper.h>
+                                                                                                                                                    #include <AccelStepper.h>
 #include <LiquidCrystal_I2C.h>
 #include <EEPROM.h>
 #include <RTC.h>     // Built-in RTC library for UNO R4 WiFi
@@ -818,6 +818,11 @@ void setup() {
     
     Serial.println("Starting LCD init...");
     lcd.init();
+    lcd.clear();
+    lcd.backlight();
+    Wire.beginTransmission(0x27);  // or 0x3F depending on your module
+    Wire.write(0x90);  // Try different values between 0x00 and 0xFF for contrast
+    Wire.endTransmission();
     Serial.println("LCD init done");
     
     Serial.println("Turning on backlight...");
