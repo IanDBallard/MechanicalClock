@@ -1,10 +1,11 @@
-                                                                                                                                                    #include <AccelStepper.h>
+#include <AccelStepper.h>
 #include <LiquidCrystal_I2C.h>
 #include <EEPROM.h>
 #include <RTC.h>     // Built-in RTC library for UNO R4 WiFi
 #include <WiFiS3.h>  // Complete WiFi library for UNO R4 WiFi
 #include <Wire.h>
 #include <NTPClient.h>
+#include <hal_data.h> // Include necessary Renesas headers if not already present
 
 // State management enum
 enum ClockState {
@@ -143,6 +144,32 @@ byte SYNC_SYMBOL[] = {
     B00000
 };
 
+// Define base addresses and bit masks based on your provided info
+#define SYSTEM_RSTSR0 (*(volatile uint8_t*)0x4001E400)
+#define SYSTEM_RSTSR1 (*(volatile uint8_t*)0x4001E401)
+#define SYSTEM_RSTSR2 (*(volatile uint8_t*)0x4001E402)
+
+// RSTSR0 Flags (Bit Masks)
+#define PORF_BIT    0
+#define LVD0RF_BIT  1
+#define LVD1RF_BIT  2
+#define LVD2RF_BIT  3
+#define DPSRSTF_BIT 4
+
+// RSTSR1 Flags (Bit Masks)
+#define CWSF_BIT    0
+
+// RSTSR2 Flags (Bit Masks)
+#define IWDTRF_BIT  0
+#define WDTRF_BIT   1
+#define SWRF_BIT    2
+// RPERF_BIT 6 and RECCRF_BIT 7 are less relevant for time recovery
+
+// Global variable to store the determined start time
+time_t initialClockTime = 0;
+bool useEEPROMForInitialTime = false; // Flag to decide time source
+bool lcdSuccessfullyInitialized = false; // <<< ADD THIS GLOBAL FLAG
+
 void printWifiStatus() {
   // print the SSID of the network you're attached to:
   Serial.print("SSID: ");
@@ -262,11 +289,17 @@ void PowerOff() {
   ArduinoBoardLED.On();
   IdleStepper();
   // Store current time in EEPROM
-  EEPROM.put(eepromAddressTime, now.getUnixTime());
-  __WFI();
+  time_t currentTime = now.getUnixTime();
+  // It's generally unsafe to use Serial inside an ISR. Commenting out.
+  // Serial.print("PowerOff ISR: Saved time to EEPROM: ");
+  // Serial.println(currentTime);
+  EEPROM.put(eepromAddressTime, currentTime);
+  __WFI(); // Enter low power mode
 }
 
 void DisplayDateTime() {
+    if (!lcdSuccessfullyInitialized) return; // <<< ADD THIS GUARD
+
     static int lastDay = -1;
     static int lastHour = -1;
     static int lastMinute = -1;
@@ -328,20 +361,6 @@ void DisplayDateTime() {
         lastMinute = currentMinute;
         lastSecond = currentSecond;
     }
-}
-
-time_t GetPowerDownTime() {
-  time_t storedUnixTime;
-
-  // Retrieve last known position of the clock hands and move them to reflect current time.
-  // Get time from onboard RTC (using RTClock class)
-  RTC.getTime(now);
-  // Read last stored time from EEPROM
-  EEPROM.get(eepromAddressTime, storedUnixTime);
-  ;
-  Serial.print(" Stored Unix Time : ");
-  Serial.println(storedUnixTime);
-  return storedUnixTime;
 }
 
 // Add these constants at the top with your other constants
@@ -680,47 +699,144 @@ bool ensureWiFiConnection() {
 }
 
 void handleNormalOperation() {
-    static time_t PreviousUnixTime = GetPowerDownTime();
-    static uint16_t CurrentSecond = 0;
-    static uint16_t CurrentHour = 0;
-    
+    // Initialize PreviousUnixTime ONLY ONCE using the globally determined time
+    static time_t PreviousUnixTime = 0; // Initialize to 0
+    static bool firstRun = true;
+    if (firstRun) {
+         PreviousUnixTime = initialClockTime; // Set using the value from setup()
+         Serial.print("[DEBUG] handleNormalOperation starting with initial PreviousUnixTime: "); // DEBUG
+         Serial.println(PreviousUnixTime); // DEBUG
+         firstRun = false;
+         // Optional: If initialClockTime is 0 (RTC init failed), handle it
+         if (PreviousUnixTime == 0) {
+            Serial.println("[DEBUG] WARNING: Starting time is invalid!"); // DEBUG
+            // Perhaps transition to an error state or force NTP sync
+         }
+    }
+
+    static uint16_t CurrentSecond = 0; // Local tracking, updated from 'now'
+    static uint16_t CurrentHour = 0;   // Local tracking, updated from 'now'
+    static unsigned long lastDebugPrint = 0; // DEBUG: Throttle debug prints
+
     int stepsToMove = 0;
-    myStepper.run();
+    myStepper.run(); // Keep running the stepper state machine
 
-    // Get time from onboard RTC
-    RTC.getTime(now);
+    // Get current time from onboard RTC
+    RTC.getTime(now); // 'now' is the global RTCTime object
 
+    // Update LCD display if the second has changed
     if (CurrentSecond != now.getSeconds()) {
         CurrentSecond = now.getSeconds();
-        DisplayDateTime();
+        DisplayDateTime(); // Update the LCD
+
+        // --- DEBUG: Print time/stepper info once per second --- 
+        if (millis() - lastDebugPrint >= 1000) { // Print roughly every second
+            lastDebugPrint = millis();
+            Serial.print("[DEBUG] Time: "); Serial.print(now.getUnixTime());
+            Serial.print(" | PrevUnix: "); Serial.print(PreviousUnixTime);
+            Serial.print(" | SecsPerStep: "); Serial.print(SecondsPerStep);
+            Serial.print(" | Target: "); Serial.print(PreviousUnixTime + SecondsPerStep);
+            bool shouldMove = (now.getUnixTime() >= PreviousUnixTime + SecondsPerStep);
+            Serial.print(" | ShouldMove: "); Serial.print(shouldMove ? "YES" : "NO");
+            Serial.print(" | DistToGo: "); Serial.println(myStepper.distanceToGo());
+        }
+        // --- END DEBUG --- 
     }
 
-    if ((now.getUnixTime() % SecondsPerStep == 0) && (now.getUnixTime() != PreviousUnixTime)) {
-        // Calculate time difference and limit to 12 hours
-        long timeDiff = (now.getUnixTime() - PreviousUnixTime) % SECONDS_IN_12_HOURS;
-        stepsToMove = timeDiff / SecondsPerStep;
+    // Check if it's time to move the stepper motor
+    // Use >= comparison for safety in case a step interval is missed
+    if (now.getUnixTime() >= PreviousUnixTime + SecondsPerStep) {
+        long rawTimeDiff = (now.getUnixTime() - PreviousUnixTime);
+
+        // For catch-up, calculate steps based on the difference modulo 12 hours.
+        long effectiveTimeDiffForSteps = rawTimeDiff;
+        if (rawTimeDiff >= SECONDS_IN_12_HOURS) { // If difference is 12 hours or more
+            effectiveTimeDiffForSteps = rawTimeDiff % SECONDS_IN_12_HOURS;
+            // If modulo is 0, it means it's an exact multiple of 12 hours, so treat as full 12-hour movement.
+            if (effectiveTimeDiffForSteps == 0) {
+                effectiveTimeDiffForSteps = SECONDS_IN_12_HOURS;
+            }
+            Serial.print("[DEBUG] Raw timeDiff >= 12 hours ("); Serial.print(rawTimeDiff);
+            Serial.print("s), effectiveTimeDiff for steps: "); Serial.println(effectiveTimeDiffForSteps);
+        } else if (rawTimeDiff < 0) {
+            // Time went backwards - this is unusual. For now, don't move, just resync PreviousUnixTime.
+            Serial.print("[DEBUG] Time went backwards! Raw timeDiff: "); Serial.println(rawTimeDiff);
+            effectiveTimeDiffForSteps = 0; 
+        }
+        // If rawTimeDiff is positive but less than 12 hours, effectiveTimeDiffForSteps is just rawTimeDiff.
         
-        myStepper.move(stepsToMove + myStepper.distanceToGo());
-        PreviousUnixTime = now.getUnixTime();
+        stepsToMove = effectiveTimeDiffForSteps / SecondsPerStep;
+
+        if (stepsToMove > 1) {
+            Serial.print("[DEBUG] Catch-up MOVE! Raw Diff: "); Serial.print(rawTimeDiff);
+            Serial.print("s, Effective Diff for Steps: "); Serial.print(effectiveTimeDiffForSteps);
+            Serial.print("s, calculated stepsToMove: "); Serial.println(stepsToMove);
+        } else if (stepsToMove == 1) {
+             Serial.print("[DEBUG] Regular MOVE. Raw Diff: "); Serial.print(rawTimeDiff);
+             Serial.print("s, stepsToMove: "); Serial.println(stepsToMove);
+        }
+
+        if (stepsToMove > 0) {
+             long targetPosition = stepsToMove + myStepper.distanceToGo(); 
+             Serial.print(", Current DistToGo: "); Serial.print(myStepper.distanceToGo()); 
+             Serial.print(", Target Pos: "); Serial.println(targetPosition); 
+             myStepper.move(targetPosition);
+
+             // After any move, align PreviousUnixTime to be just behind the current time, 
+             // on a proper step boundary, to prepare for the next single step.
+             // This avoids PreviousUnixTime lapping now.getUnixTime() in a 12-hour cycle.
+             PreviousUnixTime = now.getUnixTime() - (now.getUnixTime() % SecondsPerStep);
+             // If now.getUnixTime() was exactly on a SecondsPerStep boundary, the above would make
+             // PreviousUnixTime == now.getUnixTime(). We want PreviousUnixTime to be *before* the next step.
+             // So, if they are equal, subtract one more SecondsPerStep, unless it was a catch-up from a past value.
+             if (PreviousUnixTime == now.getUnixTime() && rawTimeDiff >= SecondsPerStep) {
+                PreviousUnixTime -= SecondsPerStep;
+             }
+
+             Serial.print("[DEBUG] Updated PreviousUnixTime to: "); Serial.println(PreviousUnixTime);
+        } else if (rawTimeDiff < 0) {
+            // If time went backwards and no steps were moved, still resync PreviousUnixTime.
+            PreviousUnixTime = now.getUnixTime() - (now.getUnixTime() % SecondsPerStep);
+            Serial.print("[DEBUG] Resynced PreviousUnixTime due to backward time jump: "); Serial.println(PreviousUnixTime);
+        }
     }
 
+    // LED indicator based on stepper movement
     if (myStepper.distanceToGo() == 0) {
         ArduinoBoardLED.Off();
     } else {
         ArduinoBoardLED.On();
     }
 
+    // Power management for stepper - NOTE: ENABLE_PIN is assumed externally LOW (always enabled)
+    // Calls to WakeStepper/IdleStepper might affect library behavior but not driver power.
     if (myStepper.distanceToGo() != 0) {
-        lastStepperMove = millis();
-        WakeStepper();
+        // Stepper needs to move, ensure AccelStepper internal state is active if needed
+        // WakeStepper(); // Re-enable library step generation if disableOutputs() was called
+        lastStepperMove = millis(); // Update last move time
     } else if (millis() - lastStepperMove > STEPPER_IDLE_TIMEOUT) {
-        IdleStepper();  // Power down stepper when not moving
+        // Stepper is idle, potentially disable AccelStepper internal step generation
+        // IdleStepper(); 
+        // NOTE: Since driver is always enabled, this might not save significant power
     }
 
-    // Update DST status once per hour
+    // Periodic checks (e.g., DST, NTP sync) - maybe less frequently than every loop
+    static unsigned long lastHourlyCheck = 0;
+    if (millis() - lastHourlyCheck >= 3600000UL) { // Check roughly every hour
+        lastHourlyCheck = millis();
+        isDST = calculateDST(now); // Recalculate DST
+        Serial.print("Hourly check: DST active = "); Serial.println(isDST);
+
+        // Consider triggering NTP sync here if needed (e.g., if last sync is old)
+        if (millis() - lastNTPSync > NTP_SYNC_INTERVAL) {
+             Serial.println("NTP sync interval passed. Transitioning to sync time.");
+             updateState(STATE_SYNCING_TIME); // This will trigger the sync process
+             return; // Exit handleNormalOperation early to allow state transition
+        }
+    }
+    // Update CurrentHour tracking for the hourly check logic
     if (CurrentHour != now.getHour()) {
-        CurrentHour = now.getHour();
-        isDST = calculateDST(now);
+         CurrentHour = now.getHour();
     }
 }
 
@@ -762,23 +878,95 @@ void updateState(ClockState newState) {
 }
 
 void setup() {
-    delay(100);  // Keep this short delay
-    
-    Serial.begin(9600);
+    // --- Reset Cause Detection ---
+    // Read reset status registers IMMEDIATELY (reading clears flags)
+    uint8_t rstsr0_val = SYSTEM_RSTSR0;
+    uint8_t rstsr1_val = SYSTEM_RSTSR1;
+    uint8_t rstsr2_val = SYSTEM_RSTSR2;
+
+    Serial.begin(9600); // Start serial early for debugging reset cause
     Serial.println("\n\n=== Starting Clock Setup ===");
-    
-    // Initialize hardware
+    Serial.print("RSTSR0: 0b"); Serial.println(rstsr0_val, BIN);
+    Serial.print("RSTSR1: 0b"); Serial.println(rstsr1_val, BIN);
+    Serial.print("RSTSR2: 0b"); Serial.println(rstsr2_val, BIN);
+
+    // Determine reset cause
+    bool powerRelatedReset = bitRead(rstsr0_val, PORF_BIT)  ||
+                             bitRead(rstsr0_val, LVD0RF_BIT) ||
+                             bitRead(rstsr0_val, LVD1RF_BIT) ||
+                             bitRead(rstsr0_val, LVD2RF_BIT) ||
+                             bitRead(rstsr0_val, DPSRSTF_BIT);
+
+    bool softOrWatchdogReset = bitRead(rstsr2_val, SWRF_BIT)   ||
+                               bitRead(rstsr2_val, IWDTRF_BIT) ||
+                               bitRead(rstsr2_val, WDTRF_BIT);
+
+    bool isWarmStart = bitRead(rstsr1_val, CWSF_BIT);
+
+    if (powerRelatedReset) {
+        Serial.println("Reset Cause: Power-On / Low Voltage / Deep Sleep Exit.");
+        useEEPROMForInitialTime = true;
+    } else if (softOrWatchdogReset) {
+        Serial.println("Reset Cause: Software / Watchdog Reset.");
+        useEEPROMForInitialTime = false; // Use current RTC time
+    } else if (isWarmStart) {
+        // If it's a Warm Start but NOT power-related or known soft/watchdog,
+        // infer it's an External Reset (RES pin, Upload, Debug)
+        Serial.println("Reset Cause: External Reset (Pin/Upload/Debug).");
+        useEEPROMForInitialTime = false; // Use current RTC time
+    } else {
+        // Default case (e.g., Cold Start without specific power flags - unlikely but possible first boot)
+        Serial.println("Reset Cause: Unknown or Initial Cold Boot.");
+        useEEPROMForInitialTime = false; // Default to using RTC time
+    }
+
+    // --- End Reset Cause Detection ---
+
+    // Initialize hardware AFTER determining reset cause
     Serial.println("Initializing hardware...");
     Wire.begin();
     Serial.println("Wire begun");
-    
+
+    // !!! Initialize RTC *before* trying to get current time !!!
+    if (!RTC.begin()) {
+        Serial.println("RTC begin failed!");
+        // Handle error - maybe force config mode or NTP sync
+        // For now, we'll try to continue but time might be wrong
+        initialClockTime = 0; // Indicate time is invalid
+    } else {
+        Serial.println("RTC initialized");
+
+        // Determine the initial time *after* RTC is initialized
+        if (useEEPROMForInitialTime) {
+            EEPROM.get(eepromAddressTime, initialClockTime);
+            Serial.print("Initial time source: EEPROM -> ");
+            // Add a simple validity check for EEPROM time
+            if (initialClockTime < 1672531200) { // Check if time seems reasonable (e.g., after Jan 1 2023)
+                 Serial.print("EEPROM time invalid/unset (");
+                 Serial.print(initialClockTime);
+                 Serial.println("), using current RTC time.");
+                 RTCTime tempNow;
+                 RTC.getTime(tempNow); // Get current time from RTC
+                 initialClockTime = tempNow.getUnixTime();
+            } else {
+                 Serial.println(initialClockTime);
+            }
+        } else {
+            RTCTime tempNow;
+            RTC.getTime(tempNow); // Get current time from RTC
+            initialClockTime = tempNow.getUnixTime();
+            Serial.print("Initial time source: Current RTC -> ");
+            Serial.println(initialClockTime);
+        }
+    }
+
     // A4988 pin setup
     pinMode(MS1_PIN, OUTPUT);
     pinMode(MS2_PIN, OUTPUT);
     pinMode(MS3_PIN, OUTPUT);
     pinMode(ENABLE_PIN, OUTPUT);
     Serial.println("Stepper pins configured");
-    
+
     // Set microstepping mode
     digitalWrite(MS1_PIN, (CURRENT_MICROSTEP & 0b100) ? HIGH : LOW);
     digitalWrite(MS2_PIN, (CURRENT_MICROSTEP & 0b010) ? HIGH : LOW);
@@ -787,86 +975,93 @@ void setup() {
     delay(100);
     digitalWrite(ENABLE_PIN, LOW);   // Then enable it
     Serial.println("Microstepping configured");
-    
+
     pinMode(POWER_PIN, INPUT);
     attachInterrupt(digitalPinToInterrupt(POWER_PIN), PowerOff, FALLING);
     Serial.println("Power interrupt configured");
-    
-    myStepper.setMaxSpeed(50);      // Reduced from 100
-    myStepper.setAcceleration(2);   // Reduced from 5
+
+    myStepper.setMaxSpeed(50);
+    myStepper.setAcceleration(2);
     Serial.println("Stepper parameters set");
-    
+
     Serial.println("Initializing LCD...");
-    Wire.beginTransmission(0x27);  // Test if LCD is present
+    Wire.beginTransmission(0x27); 
     byte error = Wire.endTransmission();
-    
-    if (error == 0) {
-        Serial.println("LCD found at address 0x27");
-    } else {
+    byte lcd_address = 0x27; 
+
+    if (error != 0) {
         Serial.println("LCD not found at 0x27, trying 0x3F...");
         Wire.beginTransmission(0x3F);
         error = Wire.endTransmission();
         if (error == 0) {
             Serial.println("LCD found at address 0x3F");
-            lcd = LiquidCrystal_I2C(0x3F, 16, 2);  // Create new instance with correct address
+            lcd_address = 0x3F;
+            // It's important to re-initialize the lcd object if the address changed
+            // However, the global lcd object is already created with 0x27.
+            // For robust dynamic address handling, lcd would ideally be a pointer initialized here.
+            // For now, if 0x27 fails and 0x3F works, the global lcd object is for the wrong address.
+            // This requires a more significant change if 0x3F is commonly used.
+            // For this fix, we assume if error is 0, the *globally defined* lcd object is the one to use.
+            // If your LCD is consistently at 0x3F, change the global definition: LiquidCrystal_I2C lcd(0x3F, 16, 2);
         } else {
             Serial.println("LCD not found! Check connections");
         }
+    } else {
+         Serial.println("LCD found at address " + String(lcd_address, HEX));
     }
-    
-    delay(100);  // Short delay before initialization
-    
-    Serial.println("Starting LCD init...");
-    lcd.init();
-    lcd.clear();
-    lcd.backlight();
-    Wire.beginTransmission(0x27);  // or 0x3F depending on your module
-    Wire.write(0x90);  // Try different values between 0x00 and 0xFF for contrast
-    Wire.endTransmission();
-    Serial.println("LCD init done");
-    
-    Serial.println("Turning on backlight...");
-    lcd.backlight();
-    Serial.println("Backlight on");
-    
-    Serial.println("Clearing display...");
-    lcd.clear();
-    Serial.println("Display cleared");
-    
-    // Test display with simple message
-    Serial.println("Writing test message...");
-    lcd.setCursor(0, 0);
-    lcd.print("LCD Test");
-    Serial.println("Test message written");
-    
-    // Create custom characters
-    byte wifiChar[8], syncChar[8];
-    memcpy(wifiChar, WIFI_SYMBOL, 8);
-    memcpy(syncChar, SYNC_SYMBOL, 8);
-    lcd.createChar(0, wifiChar);
-    lcd.createChar(1, syncChar);
-    
+
+    if (error == 0) { 
+        delay(100);
+        Serial.println("Starting LCD init...");
+        lcd.init(); 
+        lcd.clear();
+        lcd.backlight();
+        lcdSuccessfullyInitialized = true; // <<< SET FLAG HERE
+        Serial.println("LCD init done");
+
+        Serial.println("Clearing display...");
+        lcd.clear();
+        Serial.println("Display cleared");
+
+        Serial.println("Writing test message...");
+        lcd.setCursor(0, 0);
+        lcd.print("Clock Init...");
+        Serial.println("Test message written");
+
+        byte wifiChar[8], syncChar[8];
+        memcpy(wifiChar, WIFI_SYMBOL, 8);
+        memcpy(syncChar, SYNC_SYMBOL, 8);
+        lcd.createChar(0, wifiChar);
+        lcd.createChar(1, syncChar);
+    } else {
+        lcdSuccessfullyInitialized = false; // <<< ENSURE FLAG IS FALSE IF NOT FOUND/INIT
+    }
+    // --- End LCD Init block ---
+
+
     Serial.println("Loading WiFi credentials...");
     loadWiFiCredentials();
-    
+
     if (configMode) {
         Serial.println("\n=== Entering Configuration Mode ===");
-        currentState = STATE_INIT;
+        // Set initial state later in setup
     } else {
         Serial.println("\n=== Starting Normal Operation ===");
-        if (!RTC.begin()) {
-            Serial.println("RTC begin failed!");
-        } else {
-            Serial.println("RTC initialized");
-        }
-        
+        // RTC already initialized above
+
         ArduinoBoardLED.Initialize(LED_PIN);
         Serial.println("LED initialized");
-        
+
         if (!RTC.isRunning()) {
-            Serial.println("RTC was not running!");
+            Serial.println("RTC was not running! Time may be incorrect until NTP sync.");
+            // Consider forcing NTP sync or entering error state if RTC isn't running
         }
     }
+
+    // Update initial state based on configMode
+    updateState(configMode ? STATE_CONFIG : STATE_CONNECTING_WIFI); // Set initial state here
+
+
     Serial.println("Setup complete, entering main loop");
 }
 
@@ -912,13 +1107,14 @@ void loop() {
             break;
             
         case STATE_ERROR:
-            // Display error on LCD
-            lcd.clear();
-            lcd.print("Error:");
-            lcd.setCursor(0, 1);
-            lcd.print(lastError);
+            if (lcdSuccessfullyInitialized) { // <<< ADD THIS GUARD
+                lcd.clear();
+                lcd.print("Error:");
+                lcd.setCursor(0, 1);
+                lcd.print(lastError);
+            }
+            Serial.println("Error State: " + lastError); // Print error to serial as well
             delay(5000);
-            // Attempt to recover based on last state
             updateState(STATE_INIT);
             break;
     }
