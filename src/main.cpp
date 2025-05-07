@@ -782,21 +782,19 @@ void handleNormalOperation() {
              Serial.print(", Target Pos: "); Serial.println(targetPosition); 
              myStepper.move(targetPosition);
 
-             // After any move, align PreviousUnixTime to be just behind the current time, 
-             // on a proper step boundary, to prepare for the next single step.
-             // This avoids PreviousUnixTime lapping now.getUnixTime() in a 12-hour cycle.
-             PreviousUnixTime = now.getUnixTime() - (now.getUnixTime() % SecondsPerStep);
-             // If now.getUnixTime() was exactly on a SecondsPerStep boundary, the above would make
-             // PreviousUnixTime == now.getUnixTime(). We want PreviousUnixTime to be *before* the next step.
-             // So, if they are equal, subtract one more SecondsPerStep, unless it was a catch-up from a past value.
-             if (PreviousUnixTime == now.getUnixTime() && rawTimeDiff >= SecondsPerStep) {
-                PreviousUnixTime -= SecondsPerStep;
-             }
+             // Advance PreviousUnixTime by the time represented by the steps just commanded.
+             time_t oldPrevTime = PreviousUnixTime; // DEBUG
+             PreviousUnixTime += stepsToMove * SecondsPerStep; 
+             Serial.print("[DEBUG] Updated PreviousUnixTime from "); Serial.print(oldPrevTime); // DEBUG
+             Serial.print(" to "); Serial.println(PreviousUnixTime); // DEBUG
 
-             Serial.print("[DEBUG] Updated PreviousUnixTime to: "); Serial.println(PreviousUnixTime);
         } else if (rawTimeDiff < 0) {
-            // If time went backwards and no steps were moved, still resync PreviousUnixTime.
+            // If time went backwards and no steps were moved, resync PreviousUnixTime 
+            // to be just behind the current time, on a proper step boundary.
             PreviousUnixTime = now.getUnixTime() - (now.getUnixTime() % SecondsPerStep);
+            if (PreviousUnixTime == now.getUnixTime()) { // Ensure it's before current time
+                PreviousUnixTime -= SecondsPerStep;
+            }
             Serial.print("[DEBUG] Resynced PreviousUnixTime due to backward time jump: "); Serial.println(PreviousUnixTime);
         }
     }
