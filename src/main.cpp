@@ -169,6 +169,7 @@ byte SYNC_SYMBOL[] = {
 time_t initialClockTime = 0;
 bool useEEPROMForInitialTime = false; // Flag to decide time source
 bool lcdSuccessfullyInitialized = false; // <<< ADD THIS GLOBAL FLAG
+time_t CurrentClockTime = 0; // <<< ADD: Represents the target time of the clock hands
 
 void printWifiStatus() {
   // print the SSID of the network you're attached to:
@@ -274,12 +275,18 @@ char daysOfTheWeek[7][12] = { "Sunday", "Monday", "Tuesday", "Wednesday", "Thurs
 RTCTime now;
 
 void IdleStepper() {
-  myStepper.disableOutputs();
+  if (digitalRead(ENABLE_PIN) == LOW) { // Only act if currently enabled
+      digitalWrite(ENABLE_PIN, HIGH); // Disable A4988 driver (HIGH = disabled for A4988)
+      Serial.println("[DEBUG] Stepper explicitly DISABLED via ENABLE_PIN"); 
+  }
 }
 
 void WakeStepper() {
-  myStepper.enableOutputs();
-  delay(10);
+  if (digitalRead(ENABLE_PIN) == HIGH) { // Only act if currently disabled
+      digitalWrite(ENABLE_PIN, LOW); // Enable A4988 driver (LOW = enabled for A4988)
+      Serial.println("[DEBUG] Stepper explicitly ENABLED via ENABLE_PIN"); 
+      delay(10); // Short delay for driver to stabilize after enabling
+  }
 }
 
 // Interrupt service routine for interrupt 0
@@ -699,141 +706,121 @@ bool ensureWiFiConnection() {
 }
 
 void handleNormalOperation() {
-    // Initialize PreviousUnixTime ONLY ONCE using the globally determined time
-    static time_t PreviousUnixTime = 0; // Initialize to 0
-    static bool firstRun = true;
-    if (firstRun) {
-         PreviousUnixTime = initialClockTime; // Set using the value from setup()
-         Serial.print("[DEBUG] handleNormalOperation starting with initial PreviousUnixTime: "); // DEBUG
-         Serial.println(PreviousUnixTime); // DEBUG
-         firstRun = false;
-         // Optional: If initialClockTime is 0 (RTC init failed), handle it
-         if (PreviousUnixTime == 0) {
-            Serial.println("[DEBUG] WARNING: Starting time is invalid!"); // DEBUG
-            // Perhaps transition to an error state or force NTP sync
+    // --- Continuous Targeting Logic --- 
+
+    myStepper.run(); // Keep running the stepper state machine
+
+    // Get current RTC time
+    RTC.getTime(now); 
+    time_t CurrentTime = now.getUnixTime();
+
+    // Calculate the raw time difference 
+    long rawTimeDiff = CurrentTime - CurrentClockTime;
+
+    // Calculate the effective difference for steps, considering 12-hour cycle and shortest path
+    long effectiveTimeDiffForSteps = rawTimeDiff;
+    bool effectiveDiffCalculated = false; // Flag to track if we processed >= 12h or negative diff
+
+    // Handle large forward jumps (>= 12 hours)
+    if (rawTimeDiff >= SECONDS_IN_12_HOURS) { 
+        effectiveTimeDiffForSteps = rawTimeDiff % SECONDS_IN_12_HOURS;
+        if (effectiveTimeDiffForSteps == 0) {
+            effectiveTimeDiffForSteps = SECONDS_IN_12_HOURS; // Ensure full 12h move if exact multiple
+        }
+        // After modulo, ensure shortest path (< 6 hours)
+        if (effectiveTimeDiffForSteps > SECONDS_IN_12_HOURS / 2) {
+             effectiveTimeDiffForSteps -= SECONDS_IN_12_HOURS;
+        }
+        Serial.print("[DEBUG] Raw diff >= 12h. Eff Steps Diff: "); Serial.println(effectiveTimeDiffForSteps); // Debug
+        effectiveDiffCalculated = true;
+    } 
+    // Handle large backward jumps (<= -12 hours)
+    else if (rawTimeDiff <= -SECONDS_IN_12_HOURS) { 
+        effectiveTimeDiffForSteps = rawTimeDiff % SECONDS_IN_12_HOURS;
+        if (effectiveTimeDiffForSteps == 0) {
+             effectiveTimeDiffForSteps = -SECONDS_IN_12_HOURS; // Ensure full -12h move
+        }
+        // After modulo, ensure shortest path (> -6 hours)
+        if (effectiveTimeDiffForSteps <= -SECONDS_IN_12_HOURS / 2) {
+            effectiveTimeDiffForSteps += SECONDS_IN_12_HOURS;
+        }
+         Serial.print("[DEBUG] Raw diff <= -12h. Eff Steps Diff: "); Serial.println(effectiveTimeDiffForSteps); // Debug
+        effectiveDiffCalculated = true;
+    }
+
+    // Handle smaller jumps (< 12 hours) - shortest path adjustment
+    if (!effectiveDiffCalculated) { // Only if not already handled by >= 12h cases
+         if (effectiveTimeDiffForSteps > SECONDS_IN_12_HOURS / 2) { // e.g., +10h -> -2h
+              effectiveTimeDiffForSteps -= SECONDS_IN_12_HOURS;
+              // Serial.println("[DEBUG] Short path adjust (+)"); // Debug Optional
+         } else if (effectiveTimeDiffForSteps <= -SECONDS_IN_12_HOURS / 2) { // e.g., -10h -> +2h
+              effectiveTimeDiffForSteps += SECONDS_IN_12_HOURS;
+              // Serial.println("[DEBUG] Short path adjust (-)"); // Debug Optional
          }
     }
 
-    static uint16_t CurrentSecond = 0; // Local tracking, updated from 'now'
-    static uint16_t CurrentHour = 0;   // Local tracking, updated from 'now'
-    static unsigned long lastDebugPrint = 0; // DEBUG: Throttle debug prints
+    // Calculate steps needed (integer division)
+    long stepsNeeded = effectiveTimeDiffForSteps / SecondsPerStep; 
 
-    int stepsToMove = 0;
-    myStepper.run(); // Keep running the stepper state machine
+    // Command move if necessary
+    if (stepsNeeded != 0) {
+        if (abs(stepsNeeded) > 1) { // Print details for multi-step moves
+             Serial.print("[DEBUG] Targeting Move! Steps: "); Serial.print(stepsNeeded);
+             Serial.print(", RawDiff: "); Serial.print(rawTimeDiff);
+             Serial.print(", EffDiff: "); Serial.println(effectiveTimeDiffForSteps);
+        }
+        
+        myStepper.move(stepsNeeded); // Issue relative move command
+        
+        // Update the commanded clock time
+        time_t oldClockTime = CurrentClockTime; // Debug
+        CurrentClockTime += stepsNeeded * SecondsPerStep;
+        if (abs(stepsNeeded) > 1) { // Print update details for multi-step moves
+            Serial.print("[DEBUG] Updated CurrentClockTime from "); Serial.print(oldClockTime);
+            Serial.print(" to "); Serial.println(CurrentClockTime);
+        }
+    }
 
-    // Get current time from onboard RTC
-    RTC.getTime(now); // 'now' is the global RTCTime object
-
-    // Update LCD display if the second has changed
+    // Update LCD display (uses 'now', independent of stepper state)
+    static uint16_t CurrentSecond = 0; // Local tracking for LCD update optimization
     if (CurrentSecond != now.getSeconds()) {
         CurrentSecond = now.getSeconds();
         DisplayDateTime(); // Update the LCD
-
-        // --- DEBUG: Print time/stepper info once per second --- 
-        if (millis() - lastDebugPrint >= 1000) { // Print roughly every second
-            lastDebugPrint = millis();
-            Serial.print("[DEBUG] Time: "); Serial.print(now.getUnixTime());
-            Serial.print(" | PrevUnix: "); Serial.print(PreviousUnixTime);
-            Serial.print(" | SecsPerStep: "); Serial.print(SecondsPerStep);
-            Serial.print(" | Target: "); Serial.print(PreviousUnixTime + SecondsPerStep);
-            bool shouldMove = (now.getUnixTime() >= PreviousUnixTime + SecondsPerStep);
-            Serial.print(" | ShouldMove: "); Serial.print(shouldMove ? "YES" : "NO");
-            Serial.print(" | DistToGo: "); Serial.println(myStepper.distanceToGo());
-        }
-        // --- END DEBUG --- 
     }
 
-    // Check if it's time to move the stepper motor
-    // Use >= comparison for safety in case a step interval is missed
-    if (now.getUnixTime() >= PreviousUnixTime + SecondsPerStep) {
-        long rawTimeDiff = (now.getUnixTime() - PreviousUnixTime);
-
-        // For catch-up, calculate steps based on the difference modulo 12 hours.
-        long effectiveTimeDiffForSteps = rawTimeDiff;
-        if (rawTimeDiff >= SECONDS_IN_12_HOURS) { // If difference is 12 hours or more
-            effectiveTimeDiffForSteps = rawTimeDiff % SECONDS_IN_12_HOURS;
-            // If modulo is 0, it means it's an exact multiple of 12 hours, so treat as full 12-hour movement.
-            if (effectiveTimeDiffForSteps == 0) {
-                effectiveTimeDiffForSteps = SECONDS_IN_12_HOURS;
-            }
-            Serial.print("[DEBUG] Raw timeDiff >= 12 hours ("); Serial.print(rawTimeDiff);
-            Serial.print("s), effectiveTimeDiff for steps: "); Serial.println(effectiveTimeDiffForSteps);
-        } else if (rawTimeDiff < 0) {
-            // Time went backwards - this is unusual. For now, don't move, just resync PreviousUnixTime.
-            Serial.print("[DEBUG] Time went backwards! Raw timeDiff: "); Serial.println(rawTimeDiff);
-            effectiveTimeDiffForSteps = 0; 
-        }
-        // If rawTimeDiff is positive but less than 12 hours, effectiveTimeDiffForSteps is just rawTimeDiff.
-        
-        stepsToMove = effectiveTimeDiffForSteps / SecondsPerStep;
-
-        if (stepsToMove > 1) {
-            Serial.print("[DEBUG] Catch-up MOVE! Raw Diff: "); Serial.print(rawTimeDiff);
-            Serial.print("s, Effective Diff for Steps: "); Serial.print(effectiveTimeDiffForSteps);
-            Serial.print("s, calculated stepsToMove: "); Serial.println(stepsToMove);
-        } else if (stepsToMove == 1) {
-             Serial.print("[DEBUG] Regular MOVE. Raw Diff: "); Serial.print(rawTimeDiff);
-             Serial.print("s, stepsToMove: "); Serial.println(stepsToMove);
-        }
-
-        if (stepsToMove > 0) {
-             long targetPosition = stepsToMove + myStepper.distanceToGo(); 
-             Serial.print(", Current DistToGo: "); Serial.print(myStepper.distanceToGo()); 
-             Serial.print(", Target Pos: "); Serial.println(targetPosition); 
-             myStepper.move(targetPosition);
-
-             // Advance PreviousUnixTime by the time represented by the steps just commanded.
-             time_t oldPrevTime = PreviousUnixTime; // DEBUG
-             PreviousUnixTime += stepsToMove * SecondsPerStep; 
-             Serial.print("[DEBUG] Updated PreviousUnixTime from "); Serial.print(oldPrevTime); // DEBUG
-             Serial.print(" to "); Serial.println(PreviousUnixTime); // DEBUG
-
-        } else if (rawTimeDiff < 0) {
-            // If time went backwards and no steps were moved, resync PreviousUnixTime 
-            // to be just behind the current time, on a proper step boundary.
-            PreviousUnixTime = now.getUnixTime() - (now.getUnixTime() % SecondsPerStep);
-            if (PreviousUnixTime == now.getUnixTime()) { // Ensure it's before current time
-                PreviousUnixTime -= SecondsPerStep;
-            }
-            Serial.print("[DEBUG] Resynced PreviousUnixTime due to backward time jump: "); Serial.println(PreviousUnixTime);
-        }
-    }
-
-    // LED indicator based on stepper movement
+    // LED indicator based on stepper movement completion
     if (myStepper.distanceToGo() == 0) {
         ArduinoBoardLED.Off();
     } else {
         ArduinoBoardLED.On();
     }
 
-    // Power management for stepper - NOTE: ENABLE_PIN is assumed externally LOW (always enabled)
-    // Calls to WakeStepper/IdleStepper might affect library behavior but not driver power.
+    // Power management for stepper
+    static unsigned long lastStepperMove = 0; // Need this static var here now
     if (myStepper.distanceToGo() != 0) {
-        // Stepper needs to move, ensure AccelStepper internal state is active if needed
-        // WakeStepper(); // Re-enable library step generation if disableOutputs() was called
-        lastStepperMove = millis(); // Update last move time
-    } else if (millis() - lastStepperMove > STEPPER_IDLE_TIMEOUT) {
-        // Stepper is idle, potentially disable AccelStepper internal step generation
-        // IdleStepper(); 
-        // NOTE: Since driver is always enabled, this might not save significant power
+        WakeStepper(); // Ensure driver is enabled if moving
+        lastStepperMove = millis(); // Update last move time while motor is active
+    } else { // Motor is idle (distanceToGo == 0)
+         if (millis() - lastStepperMove > STEPPER_IDLE_TIMEOUT) {
+             IdleStepper(); // Disable stepper if idle for timeout duration
+         }
     }
 
-    // Periodic checks (e.g., DST, NTP sync) - maybe less frequently than every loop
+    // Periodic checks (DST, NTP)
     static unsigned long lastHourlyCheck = 0;
+    static uint16_t CurrentHour = 0;   // Local tracking for hourly check
     if (millis() - lastHourlyCheck >= 3600000UL) { // Check roughly every hour
         lastHourlyCheck = millis();
         isDST = calculateDST(now); // Recalculate DST
         Serial.print("Hourly check: DST active = "); Serial.println(isDST);
 
-        // Consider triggering NTP sync here if needed (e.g., if last sync is old)
         if (millis() - lastNTPSync > NTP_SYNC_INTERVAL) {
              Serial.println("NTP sync interval passed. Transitioning to sync time.");
-             updateState(STATE_SYNCING_TIME); // This will trigger the sync process
+             updateState(STATE_SYNCING_TIME); 
              return; // Exit handleNormalOperation early to allow state transition
         }
     }
-    // Update CurrentHour tracking for the hourly check logic
-    if (CurrentHour != now.getHour()) {
+    if (CurrentHour != now.getHour()) { // Keep track of hour for the check logic
          CurrentHour = now.getHour();
     }
 }
@@ -865,8 +852,8 @@ void updateState(ClockState newState) {
             break;
             
         case STATE_RUNNING:
-            WakeStepper();
-            ArduinoBoardLED.Off();
+            WakeStepper(); // Enable stepper
+            ArduinoBoardLED.Off(); // Turn off LED initially
             break;
             
         case STATE_ERROR:
@@ -883,6 +870,13 @@ void setup() {
     uint8_t rstsr2_val = SYSTEM_RSTSR2;
 
     Serial.begin(9600); // Start serial early for debugging reset cause
+
+    // --- Disable Stepper Motor Immediately ---
+    pinMode(ENABLE_PIN, OUTPUT);
+    digitalWrite(ENABLE_PIN, HIGH); // Keep driver DISABLED initially
+    Serial.println("Stepper ENABLE pin set HIGH (disabled) immediately after Serial.begin()");
+    // --- End Stepper Disable ---
+
     Serial.println("\n\n=== Starting Clock Setup ===");
     Serial.print("RSTSR0: 0b"); Serial.println(rstsr0_val, BIN);
     Serial.print("RSTSR1: 0b"); Serial.println(rstsr1_val, BIN);
@@ -958,26 +952,33 @@ void setup() {
         }
     }
 
-    // A4988 pin setup
+    // *** Initialize CurrentClockTime ***
+    CurrentClockTime = initialClockTime;
+    Serial.print("Initialized CurrentClockTime to: "); Serial.println(CurrentClockTime);
+
+    // --- Stepper Pin Configuration --- 
+    // ENABLE_PIN already configured and set HIGH above
+    
+    // Configure other stepper pins
     pinMode(MS1_PIN, OUTPUT);
     pinMode(MS2_PIN, OUTPUT);
     pinMode(MS3_PIN, OUTPUT);
-    pinMode(ENABLE_PIN, OUTPUT);
-    Serial.println("Stepper pins configured");
-
-    // Set microstepping mode
+    pinMode(dirPin, OUTPUT); // Ensure dirPin is output
+    pinMode(stepPin, OUTPUT); // Ensure stepPin is output
+    Serial.println("Stepper MS, DIR, STEP pins configured");
+    
+    // Set microstepping mode (while driver is still disabled)
     digitalWrite(MS1_PIN, (CURRENT_MICROSTEP & 0b100) ? HIGH : LOW);
     digitalWrite(MS2_PIN, (CURRENT_MICROSTEP & 0b010) ? HIGH : LOW);
     digitalWrite(MS3_PIN, (CURRENT_MICROSTEP & 0b001) ? HIGH : LOW);
-    digitalWrite(ENABLE_PIN, HIGH);  // Start with stepper disabled
-    delay(100);
-    digitalWrite(ENABLE_PIN, LOW);   // Then enable it
-    Serial.println("Microstepping configured");
+    Serial.println("Microstepping set");
+
+    // --- Stepper ENABLE remains HIGH here, will be set LOW by WakeStepper() in STATE_RUNNING --- 
 
     pinMode(POWER_PIN, INPUT);
     attachInterrupt(digitalPinToInterrupt(POWER_PIN), PowerOff, FALLING);
     Serial.println("Power interrupt configured");
-
+    
     myStepper.setMaxSpeed(50);
     myStepper.setAcceleration(2);
     Serial.println("Stepper parameters set");
@@ -1066,8 +1067,8 @@ void setup() {
 void loop() {
     static unsigned long lastDebug = 0;
     
-    // Print state every 5 seconds
-    if (millis() - lastDebug > 5000) {
+    // Print state every 5 minutes (300000 ms)
+    if (millis() - lastDebug > 300000UL) {
         lastDebug = millis();
         Serial.print("\nCurrent state: ");
         Serial.println(currentState);
