@@ -903,16 +903,16 @@ void setup() {
         useEEPROMForInitialTime = true;
     } else if (softOrWatchdogReset) {
         Serial.println("Reset Cause: Software / Watchdog Reset.");
-        useEEPROMForInitialTime = true; // Use current RTC time
+        useEEPROMForInitialTime = false; // Use current RTC time
     } else if (isWarmStart) {
         // If it's a Warm Start but NOT power-related or known soft/watchdog,
         // infer it's an External Reset (RES pin, Upload, Debug)
         Serial.println("Reset Cause: External Reset (Pin/Upload/Debug).");
-        useEEPROMForInitialTime = true; // Use current RTC time
+        useEEPROMForInitialTime = false; // Use current RTC time
     } else {
         // Default case (e.g., Cold Start without specific power flags - unlikely but possible first boot)
         Serial.println("Reset Cause: Unknown or Initial Cold Boot.");
-        useEEPROMForInitialTime = true; // Default to using RTC time
+        useEEPROMForInitialTime = false; // Default to using RTC time
     }
 
     // --- End Reset Cause Detection ---
