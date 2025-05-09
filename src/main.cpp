@@ -731,7 +731,7 @@ void handleNormalOperation() {
         if (effectiveTimeDiffForSteps > SECONDS_IN_12_HOURS / 2) {
              effectiveTimeDiffForSteps -= SECONDS_IN_12_HOURS;
         }
-        Serial.print("[DEBUG] Raw diff >= 12h. Eff Steps Diff: "); Serial.println(effectiveTimeDiffForSteps); // Debug
+        // Serial.print("[DEBUG] Raw diff >= 12h. Eff Steps Diff: "); Serial.println(effectiveTimeDiffForSteps); // Debug - Already commented by user
         effectiveDiffCalculated = true;
     } 
     // Handle large backward jumps (<= -12 hours)
@@ -744,7 +744,7 @@ void handleNormalOperation() {
         if (effectiveTimeDiffForSteps <= -SECONDS_IN_12_HOURS / 2) {
             effectiveTimeDiffForSteps += SECONDS_IN_12_HOURS;
         }
-         Serial.print("[DEBUG] Raw diff <= -12h. Eff Steps Diff: "); Serial.println(effectiveTimeDiffForSteps); // Debug
+        // Serial.print("[DEBUG] Raw diff <= -12h. Eff Steps Diff: "); Serial.println(effectiveTimeDiffForSteps); // <<< COMMENT THIS OUT TOO
         effectiveDiffCalculated = true;
     }
 
@@ -765,17 +765,20 @@ void handleNormalOperation() {
     // Command move if necessary
     if (stepsNeeded != 0) {
         if (abs(stepsNeeded) > 1) { // Print details for multi-step moves
-             Serial.print("[DEBUG] Targeting Move! Steps: "); Serial.print(stepsNeeded);
+             Serial.print("[DEBUG] Targeting Move! Current DistToGo: "); Serial.print(myStepper.distanceToGo()); // Debug
+             Serial.print(", Additional StepsNeeded: "); Serial.print(stepsNeeded);
              Serial.print(", RawDiff: "); Serial.print(rawTimeDiff);
              Serial.print(", EffDiff: "); Serial.println(effectiveTimeDiffForSteps);
         }
         
-        myStepper.move(stepsNeeded); // Issue relative move command
+        // Issue an adjusted relative move command
+        myStepper.move(myStepper.distanceToGo() + stepsNeeded); 
         
         // Update the commanded clock time
         time_t oldClockTime = CurrentClockTime; // Debug
         CurrentClockTime += stepsNeeded * SecondsPerStep;
-        if (abs(stepsNeeded) > 1) { // Print update details for multi-step moves
+        // Print update details only if it changed or was a multi-step adjustment
+        if (CurrentClockTime != oldClockTime || abs(stepsNeeded) > 1) { 
             Serial.print("[DEBUG] Updated CurrentClockTime from "); Serial.print(oldClockTime);
             Serial.print(" to "); Serial.println(CurrentClockTime);
         }
@@ -900,16 +903,16 @@ void setup() {
         useEEPROMForInitialTime = true;
     } else if (softOrWatchdogReset) {
         Serial.println("Reset Cause: Software / Watchdog Reset.");
-        useEEPROMForInitialTime = false; // Use current RTC time
+        useEEPROMForInitialTime = true; // Use current RTC time
     } else if (isWarmStart) {
         // If it's a Warm Start but NOT power-related or known soft/watchdog,
         // infer it's an External Reset (RES pin, Upload, Debug)
         Serial.println("Reset Cause: External Reset (Pin/Upload/Debug).");
-        useEEPROMForInitialTime = false; // Use current RTC time
+        useEEPROMForInitialTime = true; // Use current RTC time
     } else {
         // Default case (e.g., Cold Start without specific power flags - unlikely but possible first boot)
         Serial.println("Reset Cause: Unknown or Initial Cold Boot.");
-        useEEPROMForInitialTime = false; // Default to using RTC time
+        useEEPROMForInitialTime = true; // Default to using RTC time
     }
 
     // --- End Reset Cause Detection ---
@@ -931,14 +934,14 @@ void setup() {
         // Determine the initial time *after* RTC is initialized
         if (useEEPROMForInitialTime) {
             EEPROM.get(eepromAddressTime, initialClockTime);
+            Serial.print("DEBUG: Raw initialTimestamp from EEPROM: "); Serial.println(initialClockTime); // <<< ADD THIS DEBUG PRINT
             Serial.print("Initial time source: EEPROM -> ");
-            // Add a simple validity check for EEPROM time
-            if (initialClockTime < 1672531200) { // Check if time seems reasonable (e.g., after Jan 1 2023)
+            if (initialClockTime < 1672531200) { 
                  Serial.print("EEPROM time invalid/unset (");
                  Serial.print(initialClockTime);
                  Serial.println("), using current RTC time.");
                  RTCTime tempNow;
-                 RTC.getTime(tempNow); // Get current time from RTC
+                 RTC.getTime(tempNow); 
                  initialClockTime = tempNow.getUnixTime();
             } else {
                  Serial.println(initialClockTime);
