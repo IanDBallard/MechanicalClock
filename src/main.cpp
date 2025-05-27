@@ -1254,18 +1254,15 @@ bool calculateDST(const RTCTime& time) {
     if (month == 3) {
         // Find the date of the first Sunday in March
         int firstSundayDate = 0;
-        for (int d = 1; d <= 7; ++d) {
-            // Use RTCLib's getDayOfWeek. It takes (year, month_enum, day_of_month_int)
-            // time.getMonth() returns the Months enum.
-            if (DayOfWeek2int(RTC.getDayOfWeek(year, time.getMonth(), d), true) == 1) { // 1 for Sunday
-                firstSundayDate = d;
+        for (int d_iter = 1; d_iter <= 7; ++d_iter) {
+            // Constructor: RTCTime(int _day, Month _m, int _year, int _hours, int _minutes, int _seconds, DayOfWeek _dof, SaveLight _sl)
+            RTCTime dateToCheck((uint8_t)d_iter, Month::MARCH, year, 0, 0, 0, DayOfWeek::SUNDAY, (SaveLight)0); 
+            if (DayOfWeek2int(dateToCheck.getDayOfWeek(), true) == 1) { // 1 for Sunday
+                firstSundayDate = d_iter;
                 break;
             }
         }
         int secondSundayDate = firstSundayDate + 7;
-        // Serial.print("[DST] March. First Sunday: "); Serial.print(firstSundayDate);
-        // Serial.print(", Second Sunday: "); Serial.print(secondSundayDate);
-        // Serial.print(", Current day: "); Serial.println(day);
         return day >= secondSundayDate;
     }
 
@@ -1273,19 +1270,17 @@ bool calculateDST(const RTCTime& time) {
     if (month == 11) {
         // Find the date of the first Sunday in November
         int firstSundayDate = 0;
-        for (int d = 1; d <= 7; ++d) {
-            if (DayOfWeek2int(RTC.getDayOfWeek(year, time.getMonth(), d), true) == 1) { // 1 for Sunday
-                firstSundayDate = d;
+        for (int d_iter = 1; d_iter <= 7; ++d_iter) {
+            RTCTime dateToCheck((uint8_t)d_iter, Month::NOVEMBER, year, 0, 0, 0, DayOfWeek::SUNDAY, (SaveLight)0);
+            if (DayOfWeek2int(dateToCheck.getDayOfWeek(), true) == 1) { // 1 for Sunday
+                firstSundayDate = d_iter;
                 break;
             }
         }
-        // Serial.print("[DST] November. First Sunday: "); Serial.print(firstSundayDate);
-        // Serial.print(", Current day: "); Serial.println(day);
-        // DST is active if current day is *before* the first Sunday.
         return day < firstSundayDate;
     }
 
     // Should not be reached if logic is complete for March/November
-    // Serial.println("[DST] Fallthrough - should not happen for Mar/Nov.");
+    // Serial.println("[DST] Fallthrough - unexpected month for detailed check.");
     return false; 
 }
