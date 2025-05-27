@@ -1225,22 +1225,67 @@ unsigned long sendCustomNTPpacket(IPAddress& address) {
 
 // Update the calculateDST function to use Month2int
 bool calculateDST(const RTCTime& time) {
-    int month = Month2int(time.getMonth());  // Convert Month to int
+    // Get year, month, day from the RTCTime object
+    // RTCTime::getYear() returns full year e.g., 2024
+    // RTCTime::getMonth() returns a Month enum. Month2int converts it.
+    // RTCTime::getDayOfMonth() returns int.
+    // RTCTime::getDayOfWeek() returns a DayOfWeek enum. DayOfWeek2int converts it.
+
+    int year = time.getYear();
+    int month = Month2int(time.getMonth()); // User's function to convert Month enum to int
     int day = time.getDayOfMonth();
-    int dow = DayOfWeek2int(time.getDayOfWeek(), true);  // 1 = Sunday, 7 = Saturday
-    
-    // US DST Rules:
-    // Begins second Sunday in March
-    // Ends first Sunday in November
-    
-    if (month < 3 || month > 11) return false;  // Jan, Feb, Dec
-    if (month > 3 && month < 11) return true;   // Apr-Oct
-    
-    int dowInMonth = (day - 1) / 7 + 1;  // Calculate which occurrence of DOW
-    
-    if (month == 3) {  // March
-        return (dowInMonth >= 2 && dow == 1) || (day >= 14);  // After second Sunday
-    } else {  // November
-        return !(dowInMonth >= 1 && dow == 1) && (day <= 7);  // Before first Sunday
+
+    // Standard US DST Rules:
+    // Starts: Second Sunday in March at 2:00 AM local time
+    // Ends:   First Sunday in November at 2:00 AM local time
+
+    // No DST in January, February, December
+    if (month < 3 || month > 11) {
+        // Serial.println("[DST] Month is Jan, Feb, or Dec. No DST.");
+        return false;
     }
+    // DST is active for all of April through October
+    if (month > 3 && month < 11) {
+        // Serial.println("[DST] Month is Apr-Oct. DST active.");
+        return true;
+    }
+
+    // March: DST starts on the second Sunday
+    if (month == 3) {
+        // Find the date of the first Sunday in March
+        int firstSundayDate = 0;
+        for (int d = 1; d <= 7; ++d) {
+            // Use RTCLib's getDayOfWeek. It takes (year, month_enum, day_of_month_int)
+            // time.getMonth() returns the Months enum.
+            if (DayOfWeek2int(RTC.getDayOfWeek(year, time.getMonth(), d), true) == 1) { // 1 for Sunday
+                firstSundayDate = d;
+                break;
+            }
+        }
+        int secondSundayDate = firstSundayDate + 7;
+        // Serial.print("[DST] March. First Sunday: "); Serial.print(firstSundayDate);
+        // Serial.print(", Second Sunday: "); Serial.print(secondSundayDate);
+        // Serial.print(", Current day: "); Serial.println(day);
+        return day >= secondSundayDate;
+    }
+
+    // November: DST ends on the first Sunday
+    if (month == 11) {
+        // Find the date of the first Sunday in November
+        int firstSundayDate = 0;
+        for (int d = 1; d <= 7; ++d) {
+            if (DayOfWeek2int(RTC.getDayOfWeek(year, time.getMonth(), d), true) == 1) { // 1 for Sunday
+                firstSundayDate = d;
+                break;
+            }
+        }
+        // Serial.print("[DST] November. First Sunday: "); Serial.print(firstSundayDate);
+        // Serial.print(", Current day: "); Serial.println(day);
+        // DST is active if current day is *before* the first Sunday.
+        return day < firstSundayDate;
+    }
+
+    // Should not be reached if logic is complete for March/November
+    // Serial.println("[DST] Fallthrough - should not happen for Mar/Nov.");
+    return false; 
 }
