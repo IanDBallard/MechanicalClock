@@ -32,6 +32,7 @@ String urlDecode(String str);
 void updateState(ClockState newState);
 unsigned long sendCustomNTPpacket(IPAddress& address);
 bool calculateDST(const RTCTime& time);
+void clearWiFiCredentials();
 
 // Global variables and constants first
 const unsigned long WIFI_TIMEOUT = 30000;  // 30 seconds timeout for WiFi connection
@@ -384,16 +385,31 @@ void loadWiFiCredentials() {
     WiFiCredentials credentials;
     EEPROM.get(100, credentials);
     
+    // Debug: Print raw EEPROM data
+    Serial.println("=== WiFi Credentials Debug ===");
+    Serial.print("isValid flag: "); Serial.println(credentials.isValid);
+    Serial.print("SSID length: "); Serial.println(strlen(credentials.ssid));
+    Serial.print("SSID content: '"); Serial.print(credentials.ssid); Serial.println("'");
+    Serial.print("Password length: "); Serial.println(strlen(credentials.password));
+    Serial.print("Password first 4 chars: '"); 
+    for(int i = 0; i < 4 && i < strlen(credentials.password); i++) {
+        Serial.print(credentials.password[i]);
+    }
+    Serial.println("'");
+    
     // Add validation check
     if (credentials.isValid && strlen(credentials.ssid) > 0 && strlen(credentials.ssid) < 32) {
         strncpy(ssid, credentials.ssid, 32);
         strncpy(pass, credentials.password, 64);
-        Serial.println("Loaded credentials:");
-        Serial.println(ssid);
+        Serial.println("✓ Credentials loaded successfully");
+        Serial.print("SSID: "); Serial.println(ssid);
     } else {
-        Serial.println("No valid credentials found");
+        Serial.println("✗ No valid credentials found - entering config mode");
+        Serial.print("Validation failed - isValid: "); Serial.print(credentials.isValid);
+        Serial.print(", SSID length: "); Serial.println(strlen(credentials.ssid));
         configMode = true;
     }
+    Serial.println("================================");
 }
 
 void saveWiFiCredentials(const char* newSsid, const char* newPassword) {
@@ -402,7 +418,36 @@ void saveWiFiCredentials(const char* newSsid, const char* newPassword) {
     strncpy(credentials.password, newPassword, 64);
     credentials.isValid = true;
     
+    Serial.println("=== Saving WiFi Credentials ===");
+    Serial.print("SSID: "); Serial.println(newSsid);
+    Serial.print("Password length: "); Serial.println(strlen(newPassword));
+    Serial.print("isValid flag: "); Serial.println(credentials.isValid);
+    Serial.print("Struct size: "); Serial.println(sizeof(WiFiCredentials));
+    Serial.println("Writing to EEPROM address 100...");
+    
     EEPROM.put(100, credentials);
+    
+    // Verify the write by reading it back
+    WiFiCredentials verifyCredentials;
+    EEPROM.get(100, verifyCredentials);
+    
+    if (verifyCredentials.isValid && strcmp(verifyCredentials.ssid, newSsid) == 0) {
+        Serial.println("✓ Credentials saved and verified successfully");
+    } else {
+        Serial.println("✗ Credentials save verification failed!");
+        Serial.print("Read back isValid: "); Serial.println(verifyCredentials.isValid);
+        Serial.print("Read back SSID: '"); Serial.print(verifyCredentials.ssid); Serial.println("'");
+    }
+    Serial.println("===============================");
+}
+
+void clearWiFiCredentials() {
+    Serial.println("=== Clearing WiFi Credentials ===");
+    WiFiCredentials emptyCredentials = {0}; // Initialize all to zero
+    emptyCredentials.isValid = false;
+    EEPROM.put(100, emptyCredentials);
+    Serial.println("✓ WiFi credentials cleared from EEPROM");
+    Serial.println("================================");
 }
 
 void setupAP() {
@@ -945,6 +990,10 @@ void setup() {
                  initialClockTime = tempNow.getUnixTime();
             } else {
                  Serial.println(initialClockTime);
+                 // Clear the saved time immediately after reading it
+                 time_t clearValue = 0;
+                 EEPROM.put(eepromAddressTime, clearValue);
+                 Serial.println("✓ Cleared saved power-down time from EEPROM");
             }
         } else {
             RTCTime tempNow;
