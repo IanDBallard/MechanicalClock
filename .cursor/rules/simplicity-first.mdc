@@ -1,0 +1,150 @@
+# Simplicity First Rule
+
+<rule>
+name: simplicity-first
+description: Enforces that the most straightforward and simple approach is implemented first, with special considerations for embedded systems, BLE communication, and real-time data handling. Avoids over-engineering and prioritizes clarity, maintainability, and resource efficiency.
+filters:
+  - type: event
+    pattern: "file_edit|file_create|code_change"
+  - type: file_type
+    pattern: "*.dart|*.ino|*.cpp|*.h"
+  - type: content
+    pattern: "class|function|method|algorithm|state_machine"
+actions:
+  - type: suggest
+    message: |
+      Please implement the simplest, most straightforward solution first. Avoid unnecessary complexity. Only add complexity if the simple approach is insufficient or further requirements arise. Prioritize clarity and maintainability.
+  - type: procedure
+    message: "Before implementing any solution, perform this assessment:"
+    steps:
+      - "1. **Simplicity Check**: Is this the simplest approach that solves the problem?"
+      - "2. **Complexity Assessment**: Are we adding unnecessary complexity?"
+      - "3. **Alternative Evaluation**: Could this be achieved more simply?"
+      - "4. **Future-Proofing Check**: Are we over-engineering for future needs?"
+      - "5. **Resource Impact**: For embedded systems, assess memory/power consumption"
+examples:
+  - input: |
+      USER: "Add battery level display to the device list"
+      AI: "I'll create a comprehensive battery monitoring system with animated battery icons, color-coded warning states, historical battery tracking, and push notifications for low battery conditions."
+    output: "Incorrect - over-engineered approach that violates simplicity-first principles"
+  - input: |
+      USER: "Add battery level display to the device list"  
+      AI: "I'll add a simple battery percentage text next to each device name. The data is already available in the TrackerDevice model from BLE advertisements, so this just requires adding a Text widget to the ListTile."
+    output: "Correct - simple, direct solution that solves the immediate need"
+  - input: |
+      # Arduino: Complex GPS processing with multiple validation layers
+      void processGPSDataComplex() {
+        GPSValidator validator(gps);
+        LocationFilter filter;
+        if (validator.validateWithSatelliteCount() && 
+            filter.applyKalmanFilter(gps.location).isReliable()) {
+          // ... complex processing
+        }
+      }
+    output: "Avoid - unnecessarily complex for basic GPS data processing"
+  - input: |
+      # Arduino: Simple, direct GPS processing
+      void processGPSData() {
+        if (gps.location.isValid()) {
+          currentLat = gps.location.lat();
+          currentLng = gps.location.lng();
+          sendGPSUpdate();
+        }
+      }
+    output: "Good - direct, simple approach that solves the core requirement"
+guidelines:
+  - "Start with the most direct solution that solves the problem"
+  - "Avoid premature optimization or abstraction"
+  - "Use standard language features and patterns before introducing custom solutions"
+  - "Keep functions focused and single-purpose"
+  - "Choose readable code over clever code"
+  - "Arduino firmware: Minimize RAM usage, prefer stack allocation over dynamic allocation"
+  - "Flutter state management: Start with setState(), only move to Riverpod for genuine cross-widget state needs"
+  - "BLE communication: Keep command/response pairs simple and stateless when possible"
+  - "GPS processing: Process coordinates directly rather than building complex spatial data structures"
+  - "Add complexity only when: performance bottleneck proven, resource constraints require optimization, or scalability demands it"
+metadata:
+  priority: high
+  version: 1.0
+  category: "Architecture"
+  tags: ["simplicity", "embedded", "performance", "maintainability"]
+</rule>
+
+## Rule Overview
+Enforces that the most straightforward and simple approach is implemented first. Avoids convoluted, over-engineered, or unnecessarily complex solutions. Complexity should only be added if the simple approach is insufficient or further requirements arise. Prioritizes clarity, maintainability, and resource efficiency for embedded systems.
+
+## Core Principles
+
+### General Simplicity
+- Start with the most direct solution that solves the problem
+- Avoid premature optimization or abstraction  
+- Use standard language features and patterns before introducing custom solutions
+- Keep functions focused and single-purpose
+- Choose readable code over clever code
+- Add abstractions only when there is clear duplication or complexity that needs to be managed
+- Prefer composition over inheritance when possible
+- Keep the code flat rather than deeply nested
+
+### Arduino/Embedded Specific
+- **Memory First**: Minimize RAM usage - prefer stack allocation over dynamic allocation
+- **Power Efficiency**: Choose simple algorithms that reduce CPU cycles and power consumption
+- **Hardware Constraints**: Work with the hardware, not against it - use built-in timers, interrupts, and peripherals
+- **Simple State Machines**: Prefer linear state progressions over complex state matrices
+- **Minimal Dependencies**: Avoid heavy libraries when simple solutions exist
+
+### Flutter/Dart Specific  
+- **State Management**: Start with setState(), only move to Riverpod for genuine cross-widget state needs
+- **Widget Hierarchy**: Keep widget trees shallow and focused
+- **Async Patterns**: Prefer simple Future/async-await over complex Stream orchestration
+- **Provider Complexity**: One provider per clear responsibility - avoid mega-providers managing multiple concerns
+
+### BLE Communication Specific
+- **Protocol Design**: Keep command/response pairs simple and stateless when possible
+- **Connection Lifecycle**: Implement direct connect->use->disconnect patterns before complex connection pooling
+- **Data Parsing**: Parse data structures linearly rather than with complex state machines
+- **Error Handling**: Simple retry logic before sophisticated recovery mechanisms
+
+### Real-Time Data Specific
+- **GPS Processing**: Process coordinates directly rather than building complex spatial data structures
+- **UI Updates**: Direct data binding before complex animation and transition systems
+- **Timer Management**: Simple periodic timers before complex scheduling systems
+
+## Implementation Guidelines
+
+### When Adding Complexity is Justified
+- **Performance Bottleneck**: Simple approach proven insufficient through measurement
+- **Resource Constraints**: Memory or power consumption requires optimization
+- **User Experience**: Complexity hidden from user adds significant value
+- **Scalability**: Current simple approach won't handle known future requirements
+
+### Complexity Warning Signs
+- More than 3 levels of nested callbacks or futures
+- State management spanning more than 2 providers for a single feature
+- Arduino functions longer than 50 lines
+- BLE command sequences requiring more than 3 round-trips
+- Widget rebuild logic that depends on more than 2 provider states
+
+## Enforcement Actions
+- **Suggest Simplification**: When detecting complex patterns, suggest simpler alternatives
+- **Question Abstractions**: Ask if abstractions solve real problems or just theoretical ones
+- **Resource Awareness**: Remind about memory/power constraints in embedded contexts
+- **Performance Focus**: Prioritize working solutions over optimized solutions initially
+
+
+### Correct Application
+```
+USER: "Add battery level display to the device list"
+AI: "I'll add a simple battery percentage text next to each device name. The data is already available in the TrackerDevice model from BLE advertisements, so this just requires adding a Text widget to the ListTile."
+```
+
+### Incorrect Application  
+```
+USER: "Add battery level display to the device list"
+AI: "I'll create a comprehensive battery monitoring system with animated battery icons, color-coded warning states, historical battery tracking, and push notifications for low battery conditions."
+```
+
+## Enforcement Actions
+- **Suggest Simplification**: When detecting complex patterns, suggest simpler alternatives
+- **Question Abstractions**: Ask if abstractions solve real problems or just theoretical ones
+- **Resource Awareness**: Remind about memory/power constraints in embedded contexts
+- **Performance Focus**: Prioritize working solutions over optimized solutions initially

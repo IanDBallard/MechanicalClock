@@ -1,0 +1,134 @@
+---
+name: data-encapsulation
+description: Guides when to encapsulate data in objects vs use global structures, focusing on coherent integrity, reduced scattered references, and simplified engagement models. Emphasizes abstraction as a complexity reduction tool rather than complexity addition.
+priority: high
+version: 1.0
+category: Architecture
+tags: [encapsulation, data-structures, state-management, integrity]
+filters:
+  - type: event
+    pattern: "data_structure_design|state_management|multi_instance_handling"
+  - type: file_type
+    pattern: "*.dart|*.ino|*.cpp|*.h"
+  - type: content
+    pattern: "class|struct|Map<|List<|global|static|singleton"
+globs:
+  - "**/*.dart"
+  - "**/*.ino"
+  - "**/*.cpp"
+  - "**/*.h"
+alwaysApply: true
+---
+
+# Data Encapsulation and Abstraction Boundaries
+
+## Rule Overview
+This rule addresses the tension between encapsulation and global data structures by providing clear decision criteria. It specifically targets the problems of scattered references, integrity violations, and complex engagement models that arise from poorly chosen data organization patterns.
+
+## Key Principles
+
+### When Encapsulation REDUCES Complexity
+- **Coherent Integrity**: When data has validation rules or constraints that must be maintained
+- **Multiple Access Points**: When many different parts of the code need to read/modify the same data
+- **Independent Instances**: When you need multiple objects with independent lifecycles
+- **State Management**: When data undergoes complex state transitions
+
+### When Global Structures Are Simpler
+- **Read-Only Configuration**: Constants, service UUIDs, command codes
+- **Single Instance**: Truly singleton data with no integrity constraints
+- **Simple Shared State**: Basic flags or settings with no validation rules
+- **Performance Critical**: When object creation overhead is measurable
+
+## Decision Tree
+
+**Ask these questions in order:**
+
+1. **Does this data represent a single, cohesive concept?**
+   - YES → Continue to Q2
+   - NO → Consider global structure
+
+2. **Are there integrity constraints or validation rules?**
+   - YES → **ENCAPSULATE** with validation methods
+   - NO → Continue to Q3
+
+3. **Do multiple parts of the code need to modify this data?**
+   - YES → **ENCAPSULATE** with controlled access
+   - NO → Continue to Q4
+
+4. **Do you need multiple independent instances?**
+   - YES → **ENCAPSULATE** as object instances
+   - NO → Consider global structure
+
+## Project-Specific Applications
+
+### Cat Tracker Examples
+
+#### ✅ GOOD: Encapsulated Device State
+```dart
+class TrackerDevice {
+  final String id;
+  final String name;
+  TrackerConnectionState _connectionState;
+  int? _rssi;
+  GpsData? _lastGpsData;
+  
+  // Controlled access with validation
+  void updateConnectionState(TrackerConnectionState state) {
+    if (_validateStateTransition(state)) {
+      _connectionState = state;
+      _notifyStateChange();
+    }
+  }
+  
+  // Coherent data grouping
+  void updateFromAdvertisement(int rssi, GpsData gpsData) {
+    _rssi = rssi;
+    _lastGpsData = gpsData;
+    _lastUpdateTime = DateTime.now();
+  }
+}
+```
+
+#### ✅ GOOD: Global Constants
+```dart
+class BleServiceConstants {
+  static const String primaryServiceUuid = '6E400001-B5A3-F393-E0A9-E50E24DCCA9E';
+  static const int keepAliveCommand = 0x23;
+  static const Duration keepAliveInterval = Duration(seconds: 30);
+}
+```
+
+#### ❌ BAD: Scattered Global State
+```dart
+// Scattered across multiple files
+Map<String, dynamic> globalDeviceStates = {};
+Map<String, Timer> globalKeepAliveTimers = {};
+Map<String, StreamSubscription> globalGpsSubscriptions = {};
+
+// Results in integrity violations and scattered references
+```
+
+## Encapsulation Decision Criteria
+
+### **ENCAPSULATE when:**
+- Single cohesive concept + Multiple access points + Integrity constraints
+- Multiple independent instances + Different lifecycles  
+- Complex validation rules + State transitions
+
+### **GLOBAL when:**
+- Simple shared configuration + Read-only access + No integrity constraints
+- Single instance + Simple data + No validation rules
+
+## Guidelines
+- **Coherence Test**: If data represents a single concept (device, connection, GPS reading), encapsulate it
+- **Integrity Test**: If there are rules about valid values/transitions, encapsulate with validation
+- **Access Pattern Test**: If >3 different places modify the data, encapsulate with controlled access
+- **Instance Test**: If you need multiple independent instances, encapsulate rather than using keyed global maps
+- **Lifecycle Test**: If different instances have different creation/destruction patterns, encapsulate
+- **Simplicity Override**: If encapsulation adds more complexity than it removes, use global structures
+- **Cat Tracker Specific**: Device state, BLE connections, GPS data should be encapsulated; constants, service UUIDs, command codes can be global
+
+3. **Missing Validation**: No enforcement of data integrity rules
+4. **Lifecycle Confusion**: Using global state for data with independent lifecycles
+
+This rule helps developers make architectural decisions that lead to more maintainable, debuggable, and scalable code by providing clear criteria for when to encapsulate vs when to use global structures.

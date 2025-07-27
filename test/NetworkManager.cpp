@@ -142,11 +142,6 @@ void NetworkManager::stopAccessPoint() {
         Serial.println("Stopping AP.");
         WiFi.end(); // Stops both STA and AP modes
         delay(500);
-        
-        // Reset WiFi configuration to allow DHCP in client mode
-        // For Arduino R4 WiFi, we need to completely reset the WiFi module
-        WiFi.disconnect();
-        delay(1000); // Give more time for complete reset
     }
 }
 
@@ -159,13 +154,14 @@ bool NetworkManager::ensureConnection() {
     Serial.println("\n--- Attempting WiFi Client Connection ---");
     Serial.print("Target SSID: "); Serial.println(_credentials.ssid);
 
-    // Stop any existing connections and WiFi (like the working version)
-    Serial.println("Stopping any existing WiFi connections...");
-    WiFi.end();
-    delay(1000);
+    // For Arduino R4 WiFi, mode is handled automatically
+    // No need to explicitly set mode - WiFi.begin() handles it
+    delay(100); // Give time for any mode change
+
+    // If previously in AP mode, stop it first
+    stopAccessPoint(); 
     
-    // Try to connect (like the working version)
-    Serial.println("Attempting to connect...");
+    // Try to connect
     WiFi.begin(_credentials.ssid, _credentials.password);
     
     unsigned long startTime = millis();
@@ -176,25 +172,7 @@ bool NetworkManager::ensureConnection() {
     
     if (WiFi.status() == WL_CONNECTED) {
         Serial.println("\n✓ WiFi Connected!");
-        
-        // Wait for DHCP to assign an IP address
-        Serial.println("Waiting for DHCP to assign IP address...");
-        unsigned long dhcpStartTime = millis();
-        IPAddress currentIP = WiFi.localIP();
-        
-        while (currentIP[0] == 0 && (millis() - dhcpStartTime < 15000)) { // Wait up to 15 seconds for DHCP
-            delay(1000);
-            currentIP = WiFi.localIP();
-            Serial.print("Waiting for DHCP... Current IP: ");
-            Serial.println(currentIP);
-        }
-        
-        Serial.print("Final IP Address: "); Serial.println(currentIP);
-        
-        if (currentIP[0] == 0) {
-            Serial.println("Warning: DHCP failed to assign IP address, but continuing...");
-        }
-        
+        Serial.print("IP Address: "); Serial.println(WiFi.localIP());
         return true;
     } else {
         Serial.println("\n✗ WiFi Connection Failed!");
@@ -479,12 +457,10 @@ bool NetworkManager::_testWiFiConnection(const char* testSsid, const char* testP
     Serial.println("\n--- Testing WiFi Connection ---");
     Serial.print("Attempting to connect to SSID: "); Serial.println(testSsid);
     
-    // Stop AP mode and try to connect (like the working version)
-    Serial.println("Stopping AP mode...");
-    WiFi.end();
-    delay(1000);
+    // For Arduino R4 WiFi, mode is handled automatically
+    // No need to explicitly set mode - WiFi.begin() handles it
+    delay(100);
     
-    Serial.println("Attempting to connect...");
     WiFi.begin(testSsid, testPass);
     
     unsigned long startTime = millis();
@@ -495,7 +471,7 @@ bool NetworkManager::_testWiFiConnection(const char* testSsid, const char* testP
     
     if (WiFi.status() == WL_CONNECTED) {
         Serial.println("\n✓ Test Connection Successful!");
-        WiFi.end(); // Disconnect after test to allow AP mode to restart
+        WiFi.disconnect(); // Disconnect after test to allow AP mode to restart
         return true;
     } else {
         Serial.println("\n✗ Test Connection Failed!");

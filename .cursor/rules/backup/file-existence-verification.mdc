@@ -1,0 +1,161 @@
+---
+name: file-existence-verification
+description: Ensure that any file or directory referenced for reading, editing, or ignoring (e.g., in .gitignore) actually exists in the codebase before proceeding. Prevents referencing or acting on non-existent files or directories.
+priority: high
+version: 1.0
+category: File Management
+tags: [file-system, validation, error-prevention]
+filters:
+  - type: event
+    pattern: "file_reference|file_edit|file_read|path_reference"
+  - type: operation
+    pattern: "edit_file|read_file|gitignore_add|import_reference"
+globs:
+  - "**/*"
+alwaysApply: true
+---
+
+# File Existence Verification
+
+## Rule Overview
+Ensure that any file or directory referenced for reading, editing, or ignoring (e.g., in .gitignore) actually exists in the codebase before proceeding. Prevents referencing or acting on non-existent files or directories.
+
+## Verification Actions
+Before performing any file operation, the AI must verify:
+
+1. **File Operations**: Check that target files exist before editing, reading, or deleting
+2. **Directory Operations**: Verify directories exist before listing contents or adding files
+3. **Path References**: Confirm paths are valid before referencing in code or documentation
+4. **Import Statements**: Ensure imported files exist in the project structure
+5. **Configuration Files**: Verify referenced config files exist before modification
+
+## Implementation Guidelines
+
+### Required Verification Steps
+- **Before `edit_file`**: Confirm the target file exists or explicitly create it
+- **Before `read_file`**: Verify the file path is valid and accessible
+- **Before gitignore additions**: Check if the pattern matches actual files/directories
+- **Before imports**: Ensure the imported module/file exists in the project
+- **Before path references**: Validate the path exists in the current project structure
+
+### Error Prevention Patterns
+```bash
+# GOOD: Verify before acting
+if [ -f "path/to/file.txt" ]; then
+    edit_file("path/to/file.txt")
+else
+    echo "File does not exist, creating..."
+    create_file("path/to/file.txt")
+fi
+
+# AVOID: Acting on non-existent files
+edit_file("non-existent-file.txt")  # Will fail
+```
+
+### Project-Specific Applications
+
+#### Arduino/Embedded Development
+```cpp
+// GOOD: Verify library exists before including
+#ifdef ADAFRUIT_GPS_H
+#include <Adafruit_GPS.h>
+#endif
+
+// AVOID: Including non-existent libraries
+#include <NonExistentLibrary.h>  // Compilation error
+```
+
+#### Flutter Development
+```dart
+// GOOD: Verify file exists before importing
+// Check if custom_widget.dart exists in widgets/
+import 'package:cat_tracker_app/widgets/custom_widget.dart';
+
+// AVOID: Importing non-existent files
+import 'package:cat_tracker_app/widgets/missing_widget.dart';  // Build error
+```
+
+#### Documentation and Configuration
+```yaml
+# GOOD: Reference existing directories in pubspec.yaml
+flutter:
+  assets:
+    - assets/images/  # Verify this directory exists
+    - assets/icons/   # Verify this directory exists
+
+# AVOID: Referencing non-existent asset directories
+flutter:
+  assets:
+    - assets/missing_folder/  # Build warning/error
+```
+
+## Cat Tracker V1 Specific Considerations
+
+### Common File Patterns to Verify
+- **Arduino Libraries**: `libraries/Adafruit_GPS/`, `libraries/SparkFun_u-blox_GNSS/`
+- **Flutter Assets**: `client_app/cat_tracker_app/assets/`
+- **Documentation**: `Requirements.md`, `DesignDecisions.md`, `FiniteStateMachine.md`
+- **Configuration**: `client_app/cat_tracker_app/pubspec.yaml`, `platformio.ini`
+- **Generated Files**: `*.g.dart` files in `lib/providers/`, `lib/services/`
+
+### Directory Structure Validation
+```
+# Verify core project structure exists:
+CatTrackerV1/              # Arduino firmware
+client_app/cat_tracker_app/ # Flutter app
+libraries/                 # Arduino libraries
+.cursor/rules/             # Cursor IDE rules
+```
+
+## Examples
+
+### Correct File Reference Pattern
+```
+USER: "Edit the GPS data manager header file"
+AI: "I'll check if CatTrackerV1/GpsDataManager.h exists before editing... Yes, found it. Now editing the file."
+```
+
+### Incorrect File Reference Pattern
+```
+USER: "Edit the GPS data manager header file"
+AI: "I'll edit CatTrackerV1/GpsManager.h..." (Wrong filename - should be GpsDataManager.h)
+```
+
+### Gitignore Verification
+```
+# GOOD: Add patterns that match actual files
+.gitignore:
+  node_modules/           # Common in web projects
+  build/                  # Generated build directory
+  *.g.dart               # Generated Dart files
+  .vscode/               # VS Code settings (if exists)
+
+# AVOID: Adding patterns for non-existent files
+.gitignore:
+  random_folder/          # Doesn't exist in project
+  *.nonexistent          # No files with this extension
+```
+
+## Error Messages and Recovery
+
+### When File Doesn't Exist
+```
+"The referenced file [filename] does not exist. Options:
+1. Create the file first
+2. Verify the correct path/filename
+3. Check if the file was moved or renamed"
+```
+
+### When Directory Doesn't Exist
+```
+"The directory [directory] does not exist. I can:
+1. Create the directory structure
+2. Use an existing similar directory
+3. Verify the intended path"
+```
+
+## Integration with Other Rules
+
+- **Simplicity First**: Use simple file existence checks before complex operations
+- **Documentation First**: Verify documentation files exist before referencing design decisions
+- **Context Window Management**: Save file existence checks in session summaries to avoid repetition

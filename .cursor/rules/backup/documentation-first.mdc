@@ -1,0 +1,43 @@
+# Documentation-First Development
+
+<rule>
+name: documentation-first
+description: Ensures that project documentation is consulted and updated before any functional code changes are made. The agent must verify if changes are consistent with requirements and update relevant design documents.
+filters:
+  - type: user_intent
+    pattern: "request for functional change|add feature|modify behavior|delete functionality"
+  - type: event
+    pattern: "code_edit_request"
+  - type: file_type
+    pattern: "*.md|*.dart|*.ino|*.cpp|*.h"
+actions:
+  - type: procedure
+    message: "When requested to add, delete, or change functionality, the AI must follow this procedure:"
+    steps:
+      - "1. *Analyze Request:* Identify the core functional change being requested."
+      - "2. *Consult Documents:* Review the following documents for contradictions or necessary updates: Requirements.md, FiniteStateMachine.md, Screen Design.md, DesignDecisions.md, README.md."
+      - "3. *Report Findings:* Inform the user of any conflicts with the documentation and list all documents that will require updates to reflect the change."
+      - "4. *Await Agreement:* Do not proceed with code implementation until the user agrees on the proposed documentation changes."
+      - "5. *Implement & Document:* Once agreed, implement the code changes and update the relevant documentation concurrently."
+examples:
+  - input: |
+      # User Request (Incorrect Interaction)
+      USER: "Add a button to the main screen that silences the tracker."
+      AI: (Immediately starts writing code to add the button without checking documentation)
+    output: "Incorrect - bypasses documentation check"
+  - input: |
+      # User Request (Correct Interaction)
+      USER: "Add a button to the main screen that silences the tracker."
+      AI: "Okay, I can add a silence button. [Based on our documentation-first process][[memory:185097]], I've checked the project documents. This will require updates to Screen Design.md and FiniteStateMachine.md. Do you agree?"
+    output: "Correct - proactive, documentation-aware response that ensures alignment before implementation"
+guidelines:
+  - "This rule prioritizes documentation as the single source of truth for the project's design and requirements"
+  - "Maintaining consistency between code and documentation is critical for long-term project health"
+  - "Always consult Requirements.md, FiniteStateMachine.md, Screen Design.md, DesignDecisions.md, and README.md before functional changes"
+  - "Wait for user agreement on documentation changes before implementing code"
+metadata:
+  priority: high
+  version: 1.0
+  category: "Process"
+  tags: ["documentation", "requirements", "design"]
+</rule>

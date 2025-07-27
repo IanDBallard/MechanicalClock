@@ -42,8 +42,6 @@ private:
     
     unsigned long _lastStepperMoveTime;
     const unsigned long _stepperIdleTimeout;
-    
-
 
     void _setMicrostepping(uint8_t mode);
     void _enableStepperDriver();
@@ -59,7 +57,6 @@ public:
     void handlePowerOff() override; // Note: This will be called from ISR.
 
     void setMicrosteppingMode(uint8_t mode);
-    void updateCurrentTime() override; // Update current time after NTP sync
 
 protected:
     int _calculateStepsToAlign(int prevHour, int prevMinute, int currentHour, int currentMinute); // This will become obsolete with _currentClockTime

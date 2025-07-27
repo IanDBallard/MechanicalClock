@@ -1,0 +1,73 @@
+# Cursor Rule Standardization
+
+<rule>
+name: rule_standardization
+description: Enforces standards for authoring, naming, and placing Cursor rule files in the repository. New rules must be initially placed in the gitignored .cursor/rules/local directory before being moved to the main rules directory.
+filters:
+  - type: file_extension
+    pattern: "\\.mdc$"
+  - type: content
+    pattern: "(?s)<rule>.*?</rule>"
+  - type: event
+    pattern: "file_create"
+  - type: event
+    pattern: "file_move"
+actions:
+  - type: reject
+    conditions:
+      - pattern: "^(?!\.\/\.cursor\/rules\/(local\/)?.*\.mdc$)"
+        message: "All Cursor rule files (.mdc) must be placed in either .cursor/rules/local (for new rules) or .cursor/rules directory at the project root."
+      - pattern: "^rules\/.*"
+        message: "Rules cannot be placed in a 'rules' directory. Use '.cursor/rules' or '.cursor/rules/local' instead."
+  - type: suggest
+    message: |
+      When creating Cursor rules:
+      1. Initially place all new rule files in PROJECT_ROOT/.cursor/rules/local/
+      2. Once the rule is finalized, move it to PROJECT_ROOT/.cursor/rules/
+      3. Use kebab-case for filenames (e.g., my-rule-name.mdc)
+      4. Use the .mdc extension (NOT .rule.md or other variations)
+      5. Make filenames descriptive of the rule's purpose
+      6. Include required sections in this order:
+         - H1 title
+         - <rule> block with:
+           - name (kebab-case)
+           - description
+           - filters
+           - actions
+           - examples (with good/bad cases)
+           - guidelines (if applicable)
+           - metadata (priority, version, category, tags)
+      7. Ensure proper YAML/markdown formatting
+      8. Update this rule if new best practices are established
+examples:
+  - input: |
+      # Bad: Rule files in wrong locations or formats
+      rules/myRule.mdc
+      myrule.rule.md
+      .rules/my-rule.mdc
+      .cursor/rules/MyRule.mdc
+      .cursor/rules/my_rule.mdc
+      
+      # Good: Rule files in correct location and format
+      # New rules (initially)
+      .cursor/rules/local/new-api-endpoints.mdc
+      .cursor/rules/local/new-code-style.mdc
+      
+      # Finalized rules
+      .cursor/rules/api-endpoints.mdc
+      .cursor/rules/code-style.mdc
+      .cursor/rules/testing-standards.mdc
+    output: "Correctly placed and named Cursor rule files"
+guidelines:
+  - "Use kebab-case for all rule filenames"
+  - "Place new rules in .cursor/rules/local first for testing"
+  - "Move finalized rules to .cursor/rules directory"
+  - "Use the <rule> block format for official Cursor compatibility"
+  - "Include comprehensive examples with good/bad patterns"
+  - "Document migration plans when changing rule formats"
+metadata:
+  priority: highest
+  version: 1.2
+  category: "Standards"
+  tags: ["rules", "standards", "documentation"]
+</rule>

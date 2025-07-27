@@ -1,0 +1,203 @@
+# Documentation-First Development
+
+<rule>
+name: documentation-first
+description: Ensures that project documentation is consulted and updated before any functional code changes are made. The agent must verify if changes are consistent with requirements and update relevant design documents.
+filters:
+  - type: event
+    pattern: "functional_change|feature_add|feature_delete|architecture_change"
+  - type: change_type
+    pattern: "algorithm_modification|system_architecture|safety_critical|multi_component"
+  - type: file_type
+    pattern: "*.dart|*.ino|*.cpp|*.h|*.md"
+actions:
+  - type: procedure
+    message: "Before implementing any architectural change, enhancement, or fix, perform this assessment:"
+    steps:
+      - "1. **Architectural Changes Check**: Algorithm modifications, system architecture, design philosophy shifts, new concepts introduction"
+      - "2. **Safety-Critical Check**: Availability detection, state management, error handling, user safety impact"
+      - "3. **Multi-Component Check**: Cross-provider changes, integration changes, data flow modifications, API/interface changes"
+      - "4. **Implementation Complexity Check**: New dependencies, configuration parameters, resource management, performance impact"
+      - "5. **Documentation Planning**: List specific documents requiring updates if any criteria met"
+      - "6. **Implementation Order**: Update documentation first, then implement code, commit together"
+  - type: verify
+    conditions:
+      - pattern: "documentation_trigger_met"
+        message: "This change meets documentation trigger criteria. Document first before implementing."
+examples:
+  - input: |
+      USER: "Add multi-channel availability detection"
+      AI: "I'll implement the new availability detection algorithm right away..."
+    output: "Incorrect - architectural change requires documentation-first assessment and DesignDecisions.md updates"
+  - input: |
+      USER: "Add multi-channel availability detection"
+      AI: "This is an architectural change affecting availability detection (safety-critical). I need to update DesignDecisions.md first to document the new algorithm approach, then Requirements.md for the enhanced availability detection requirement. After documentation, I'll implement the code."
+    output: "Correct - follows documentation-first protocol for architectural changes"
+  - input: |
+      USER: "Fix typo in button text"
+      AI: "I'll update the button text directly since this is a minor UI change without architectural impact."
+    output: "Correct - minor changes don't require extensive documentation updates"
+  - input: |
+      USER: "Implement new BLE state machine"
+      AI: "This affects safety-critical device state transitions. First updating FiniteStateMachine.md to document the new states and transitions, then DesignDecisions.md for the rationale, then implementing the code."
+    output: "Correct - safety-critical changes require comprehensive documentation updates"
+guidelines:
+  - "Consult Requirements.md, FiniteStateMachine.md, DesignDecisions.md, Screen Design.md, README.md before functional changes"
+  - "Check if proposed change contradicts existing documentation"
+  - "Update documentation parallel with code changes, commit together"
+  - "For architectural changes: update DesignDecisions.md with rationale and approach"
+  - "For safety-critical changes: update Requirements.md and document risk mitigation"
+  - "For state machine changes: update FiniteStateMachine.md with new transitions"
+  - "Include comprehensive inline documentation for complex logic"
+  - "Key trigger criteria: algorithm modifications, system architecture, safety-critical systems, multi-component impact, implementation complexity"
+metadata:
+  priority: highest
+  version: 1.0
+  category: "Documentation"
+  tags: ["documentation", "architecture", "safety-critical", "process"]
+</rule>
+
+## Rule Overview
+When asked to add, delete, or change functionality, my first step will be to consult the project's design and requirements documents. I will check if the proposed change contradicts existing documentation and proactively identify which documents should be updated to reflect the new or modified functionality. If we agree on a modification, I will update the relevant documents.
+
+## Key Documents
+The key documents are: Requirements.md (core functional and non-functional requirements), FiniteStateMachine.md (logic for device state transitions), Screen Design.md (mobile app UI/UX specifications), DesignDecisions.md (rationale behind key architectural choices), README.md (general project overview), and TODO-BatteryManager-Refactor.md (future enhancement planning). The canonical version is maintained on H: drive and synced to GitHub.
+
+## 🚨 **MANDATORY DOCUMENTATION TRIGGERS**
+
+### **Critical Fix Documentation Rule**
+ANY fix, enhancement, or change that meets ONE OR MORE of the following criteria MUST trigger immediate documentation updates:
+
+#### **Architectural Changes**
+- **Algorithm Modifications:** Changes to core algorithms (availability detection, state machines, data processing)
+- **System Architecture:** New approaches that replace existing patterns (single-channel → multi-channel)
+- **Design Philosophy Shifts:** Changes in fundamental system behavior or decision-making logic
+- **New Concepts Introduction:** Adding new technical concepts, patterns, or approaches not previously documented
+
+#### **Safety-Critical System Changes**
+- **Availability Detection:** Any changes to how device availability/connectivity is determined
+- **State Management:** Modifications to device state transitions or connection management
+- **Error Handling:** New error detection, recovery, or cascading failure logic
+- **User Safety Impact:** Changes affecting user's ability to locate/track devices reliably
+
+#### **Multi-Component Impact**
+- **Cross-Provider Changes:** Modifications affecting multiple Riverpod providers or services
+- **Integration Changes:** New interactions between app components, BLE service, or firmware
+- **Data Flow Modifications:** Changes to how data flows between components or systems
+- **API/Interface Changes:** Modifications to method signatures, data structures, or communication protocols
+
+#### **Implementation Complexity**
+- **New Dependencies:** Introduction of new external libraries, services, or complex logic
+- **Configuration Parameters:** New configurable timeouts, thresholds, or system parameters
+- **Resource Management:** Changes to memory management, cleanup logic, or lifecycle handling
+- **Performance Impact:** Modifications affecting scanning frequency, power consumption, or responsiveness
+
+### **Documentation Requirements by Change Type**
+
+#### **For Algorithm/Architecture Changes:**
+1. **DesignDecisions.md:** New section explaining the change rationale, benefits, and implementation approach
+2. **Requirements.md:** Update affected functional/non-functional requirements
+3. **Code Comments:** Comprehensive inline documentation of complex logic
+
+#### **For Safety-Critical Changes:**
+1. **Requirements.md:** Update safety-related functional requirements
+2. **DesignDecisions.md:** Document safety implications and risk mitigation
+3. **FiniteStateMachine.md:** Update if state transitions are affected
+
+#### **For Multi-Component Changes:**
+1. **DesignDecisions.md:** Document integration patterns and component interactions  
+2. **README.md:** Update if overall system behavior changes
+3. **Code Documentation:** Update provider/service documentation
+
+### **Documentation Enforcement Protocol**
+
+#### **Before Implementation:**
+- **Identify Impact:** Assess if change meets any trigger criteria
+- **Plan Documentation:** List specific documents requiring updates
+- **Draft Changes:** Outline what documentation sections need modification
+
+#### **During Implementation:**  
+- **Update Documentation:** Modify documentation parallel with code changes
+- **Validate Consistency:** Ensure documentation accurately reflects implementation
+- **Review Integration:** Confirm documentation covers all affected components
+
+#### **After Implementation:**
+- **Commit Documentation:** Include documentation updates in the same commit/PR
+- **Cross-Reference:** Ensure all related documents reference the changes consistently
+- **Future Reference:** Consider adding TODO items for related enhancements
+
+### **🔒 MANDATORY COMPLIANCE PROCESS**
+
+#### **Systematic Trigger Assessment (Required Before ANY Implementation)**
+Before implementing any architectural change, enhancement, or fix, the AI MUST explicitly perform and document the following assessment:
+
+```
+Documentation Rule Assessment:
+❓ Architectural Changes: [YES/NO + specific explanation]
+❓ Safety-Critical System Changes: [YES/NO + specific explanation] 
+❓ Multi-Component Impact: [YES/NO + specific explanation]
+❓ Implementation Complexity: [YES/NO + specific explanation]
+
+Assessment Result: [DOCUMENTATION REQUIRED / NOT REQUIRED]
+```
+
+#### **Documentation Planning (If Required)**
+When documentation is required, the AI MUST explicitly list:
+
+```
+Required Documentation Updates:
+- DesignDecisions.md: [specific section/content to add/modify]
+- FiniteStateMachine.md: [specific updates needed]
+- Requirements.md: [if functional/non-functional requirements affected]
+- [other files]: [specific changes required]
+```
+
+#### **Implementation Order (Mandatory Sequence)**
+1. **Assessment**: Complete trigger assessment above
+2. **Documentation First**: Update all required documentation files  
+3. **Implementation**: Make code changes
+4. **Commit Together**: Include both documentation and code in same commit
+
+#### **Compliance Enforcement**
+- **Immediate Correction**: If this assessment is skipped, the user should call out the violation immediately
+- **Process Accountability**: Skipping this step indicates reversion to broken patterns and must be corrected
+- **No Exceptions**: This process applies to ALL qualifying changes, regardless of perceived urgency or simplicity
+
+This systematic process prevents the "implement first, document later" anti-pattern that leads to architectural knowledge loss.
+
+### **Examples of Changes Requiring Documentation**
+
+#### **MUST Document (Architectural/Safety-Critical):**
+- ✅ Multi-channel availability detection (algorithm change)
+- ✅ State machine modifications (safety-critical)
+- ✅ New BLE communication patterns (architecture change)
+- ✅ Error handling enhancements (safety-critical)
+
+#### **SHOULD Document (Significant Changes):**
+- ⚠️ New configuration parameters or timeouts
+- ⚠️ Performance optimizations with behavior changes
+- ⚠️ UI/UX modifications affecting user workflows
+- ⚠️ New logging or debugging capabilities
+
+#### **MAY Document (Minor Changes):**
+- ℹ️ Simple bug fixes without design changes
+- ℹ️ Code refactoring without behavior changes  
+- ℹ️ Minor text/styling updates
+- ℹ️ Variable renaming or cleanup
+
+### **Documentation Quality Standards**
+
+#### **Required Elements:**
+- **Decision Rationale:** Why this change was necessary
+- **Architecture Overview:** How the new approach works
+- **Implementation Details:** Key technical aspects and parameters
+- **Benefits/Impact:** What problems this solves and user experience improvements
+- **Integration Points:** How this affects other system components
+
+#### **Quality Indicators:**
+- **Comprehensive:** Covers all aspects of the change
+- **Accessible:** Understandable to future developers
+- **Actionable:** Provides enough detail for maintenance/debugging
+- **Traceable:** Clear connection between documentation and implementation
+
+This rule ensures that significant changes are properly documented for future reference, maintenance, and onboarding, preventing loss of architectural knowledge and design rationale.

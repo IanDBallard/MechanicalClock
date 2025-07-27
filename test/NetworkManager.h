@@ -101,16 +101,9 @@ public:
     unsigned long getLastNtpSyncTime() const; // Renamed for clarity
     unsigned long getNtpSyncInterval() const;
     const char* getSSID() const; // For displaying connected SSID
-    
-    // Getters for timezone settings
-    int getTimeZoneOffset() const { return _timeZoneOffsetHours; }
-    bool getUseDST() const { return _useDST; }
 
     // Clear saved WiFi credentials from EEPROM
     void clearWiFiCredentials();
-
-    // Set timezone offset (call this before begin() to override default)
-    void setTimezoneOffset(int offsetHours);
 
     // Stops the Access Point (if active)
     void stopAccessPoint();

@@ -1,0 +1,115 @@
+# File Existence Verification
+
+<rule>
+name: file-existence-verification
+description: Ensure that any file or directory referenced for reading, editing, or ignoring (e.g., in .gitignore) actually exists in the codebase before proceeding. Prevents referencing or acting on non-existent files or directories.
+filters:
+  - type: event
+    pattern: "file_reference|file_edit|file_read|path_reference"
+  - type: operation
+    pattern: "edit_file|read_file|gitignore_add|import_reference"
+  - type: file_type
+    pattern: "*"
+actions:
+  - type: verify
+    conditions:
+      - pattern: "file_exists"
+        message: "The referenced file or directory does not exist. Please confirm the path or create the file before proceeding."
+  - type: procedure
+    message: "Before performing any file operation, the AI must verify:"
+    steps:
+      - "1. **File Operations**: Check that target files exist before editing, reading, or deleting"
+      - "2. **Directory Operations**: Verify directories exist before listing contents or adding files"
+      - "3. **Path References**: Confirm paths are valid before referencing in code or documentation"
+      - "4. **Import Statements**: Ensure imported files exist in the project structure"
+      - "5. **Configuration Files**: Verify referenced config files exist before modification"
+examples:
+  - input: |
+      USER: "Edit the GPS data manager header file"
+      AI: "I'll edit CatTrackerV1/GpsManager.h..." (Wrong filename - should be GpsDataManager.h)
+    output: "Incorrect - referencing wrong filename without verification"
+  - input: |
+      USER: "Edit the GPS data manager header file"
+      AI: "I'll check if CatTrackerV1/GpsDataManager.h exists before editing... Yes, found it. Now editing the file."
+    output: "Correct - verify file existence before operations"
+  - input: |
+      # Bad: Referencing a non-existent file
+      edit_file('not-a-real-file.txt')
+      add_to_gitignore('missing-folder/')
+    output: "Incorrect - acting on non-existent files without verification"
+  - input: |
+      # Good: Referencing an existing file  
+      # First verify: file_exists('README.md') -> true
+      edit_file('README.md')
+      # Verify directory exists before gitignore
+      add_to_gitignore('node_modules/')
+    output: "Correct - always check that the file or directory exists before referencing"
+guidelines:
+  - "Always verify file existence before edit_file, read_file operations"
+  - "Check directory existence before listing contents or adding files"
+  - "Validate import paths exist in project structure"
+  - "Common Cat Tracker V1 patterns: libraries/Adafruit_GPS/, client_app/cat_tracker_app/assets/, Requirements.md, DesignDecisions.md"
+  - "Provide helpful error messages with options when files don't exist: create, verify path, check if moved/renamed"
+  - "Use file_search or list_dir tools to verify structure before operations"
+  - "For Arduino: verify library includes exist before referencing"
+  - "For Flutter: verify asset directories and import paths exist"
+metadata:
+  priority: high
+  version: 1.0
+  category: "File Management"
+  tags: ["file-system", "validation", "error-prevention", "verification"]
+</rule>
+
+## Rule Overview
+Ensure that any file or directory referenced for reading, editing, or ignoring (e.g., in .gitignore) actually exists in the codebase before proceeding. Prevents referencing or acting on non-existent files or directories.
+
+## Verification Actions
+Before performing any file operation, the AI must verify:
+
+1. **File Operations**: Check that target files exist before editing, reading, or deleting
+2. **Directory Operations**: Verify directories exist before listing contents or adding files
+3. **Path References**: Confirm paths are valid before referencing in code or documentation
+4. **Import Statements**: Ensure imported files exist in the project structure
+5. **Configuration Files**: Verify referenced config files exist before modification
+
+## Cat Tracker V1 Specific Considerations
+
+### Common File Patterns to Verify
+- **Arduino Libraries**: `libraries/Adafruit_GPS/`, `libraries/SparkFun_u-blox_GNSS/`
+- **Flutter Assets**: `client_app/cat_tracker_app/assets/`
+- **Documentation**: `Requirements.md`, `DesignDecisions.md`, `FiniteStateMachine.md`
+- **Configuration**: `client_app/cat_tracker_app/pubspec.yaml`, `platformio.ini`
+- **Generated Files**: `*.g.dart` files in `lib/providers/`, `lib/services/`
+
+### Directory Structure Validation
+```
+# Verify core project structure exists:
+CatTrackerV1/              # Arduino firmware
+client_app/cat_tracker_app/ # Flutter app
+libraries/                 # Arduino libraries
+.cursor/rules/             # Cursor IDE rules
+```
+
+## Error Messages and Recovery
+
+### When File Doesn't Exist
+```
+"The referenced file [filename] does not exist. Options:
+1. Create the file first
+2. Verify the correct path/filename
+3. Check if the file was moved or renamed"
+```
+
+### When Directory Doesn't Exist
+```
+"The directory [directory] does not exist. I can:
+1. Create the directory structure
+2. Use an existing similar directory
+3. Verify the intended path"
+```
+
+- **Immediate Correction**: If verification is skipped, the user should call out the violation immediately
+- **No Assumptions**: Never assume files exist without explicit verification
+- **No Exceptions**: This process applies to ALL file operations (edit_file, read_file, imports, gitignore, etc.)
+
+This systematic process prevents "file not found" errors and ensures reliable file operations.

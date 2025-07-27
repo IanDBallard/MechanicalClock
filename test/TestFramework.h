@@ -4,6 +4,8 @@
 #include <Arduino.h>
 #include <vector>
 #include <functional>
+#include <WiFiS3.h>
+#include <RTC.h>
 
 // Test result structure
 struct TestResult {
@@ -220,7 +222,7 @@ extern TestRegistry testRegistry;
 #define TEST_SETUP() \
     void setup() { \
         Serial.begin(115200); \
-        while (!Serial) delay(10); \
+        delay(1000); /* Give Serial time to initialize without blocking */ \
         Serial.println("Starting unit tests..."); \
         setupTests(); \
         testRegistry.runAllTests(); \

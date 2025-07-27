@@ -39,11 +39,4 @@ void DigitalClock::adjustToInitialTime(time_t initialUnixTime) {
 
 void DigitalClock::handlePowerOff() {
     Serial.println("DigitalClock::handlePowerOff() called.");
-}
-
-void DigitalClock::updateCurrentTime() {
-    Serial.print("DigitalClock::updateCurrentTime() called with: ");
-    Serial.println("(no parameters needed - always reads from RTC)");
-    // Digital clock doesn't need to track current time internally
-    // It always reads from RTC, so this is a no-op
 } 

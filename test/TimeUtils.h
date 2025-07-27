@@ -19,9 +19,4 @@ extern const char* const DOW_ABBREV[];
 // For a fully robust solution, this might need more sophisticated timezone data.
 bool calculateDST(RTCTime& time, int timeZoneOffsetHours); 
 
-// UTC/Local time conversion functions
-RTCTime convertUTCToLocal(time_t utcTime, int timeZoneOffsetHours, bool useDST);
-time_t convertLocalToUTC(const RTCTime& localTime, int timeZoneOffsetHours, bool useDST);
-time_t getCurrentUTC();
-
 #endif // TIME_UTILS_H 

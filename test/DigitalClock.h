@@ -23,7 +23,6 @@ public:
 
     void adjustToInitialTime(time_t initialUnixTime) override;
     void handlePowerOff() override; 
-    void updateCurrentTime() override; // Update current time after NTP sync
 };
 
 #endif // DIGITAL_CLOCK_H 

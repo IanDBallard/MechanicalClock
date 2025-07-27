@@ -18,10 +18,8 @@ void StateManager::update() {
     // Run the current state's logic
     _runCurrentStateLogic();
     
-    // Only update the clock in appropriate states (not during config, connecting, etc.)
-    if (_currentState == STATE_RUNNING || _currentState == STATE_POWER_SAVING) {
-        _clock.update();
-    }
+    // Update the clock (this calls the appropriate update method based on clock type)
+    _clock.update();
 }
 
 void StateManager::transitionTo(ClockState newState) {
@@ -206,9 +204,6 @@ void StateManager::_runConnectingWiFiState() {
 void StateManager::_runSyncingTimeState() {
     // Attempt NTP sync using the RTC reference
     if (_networkManager.syncTimeWithRTC(_rtc)) {
-        // After successful NTP sync, update the clock's current time
-        _clock.updateCurrentTime();
-        
         transitionTo(STATE_RUNNING);
     }
     
@@ -220,13 +215,13 @@ void StateManager::_runSyncingTimeState() {
 }
 
 void StateManager::_runRunningState() {
-    // Get current UTC time and convert to local for display
-    time_t currentUTC = getCurrentUTC();
-    RTCTime localTime = convertUTCToLocal(currentUTC, _networkManager.getTimeZoneOffset(), _networkManager.getUseDST());
-    _lcdDisplay.updateTimeAndDate(localTime);
-    _lcdDisplay.updateNetworkStatus(_networkManager.getWiFiStatus(), 
-                                _networkManager.getLastNtpSyncTime(),
-                                _networkManager.getNtpSyncInterval());
+    // Update LCD display with current time and network status
+    RTCTime currentTime;
+    _rtc.getTime(currentTime);
+    _lcdDisplay.updateTimeAndDate(currentTime);
+        _lcdDisplay.updateNetworkStatus(_networkManager.getWiFiStatus(), 
+                                    _networkManager.getLastNtpSyncTime(),
+                                    _networkManager.getNtpSyncInterval());
     
     // Check if periodic NTP sync is needed
     if (_networkManager.isNTPSyncNeeded()) {

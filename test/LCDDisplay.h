@@ -39,10 +39,6 @@ private:
     bool _initialized;
     uint8_t _address;
 
-    // Screen buffer system for optimization
-    char _screenBuffer[LCD_HEIGHT][LCD_WIDTH + 1]; // +1 for null terminator
-    bool _bufferInitialized;
-
     // Custom characters (as members to be created once)
     byte _wifiSymbol[8] = {
         B00000,
@@ -82,13 +78,6 @@ private:
     bool _errorDisplayed = false;
     unsigned long _errorStartTime = 0;
     unsigned long _errorDuration = 3000; // 3 seconds default
-
-    // Private helper methods for buffer management
-    void initializeBuffer();
-    void updateBufferChar(uint8_t line, uint8_t col, char newChar);
-    void updateBufferString(uint8_t line, uint8_t col, const String& newString, uint8_t maxLength = LCD_WIDTH);
-    void clearBufferLine(uint8_t line);
-    void clearBuffer();
     
 public:
     // Constructor: Takes the I2C address of the LCD
@@ -126,9 +115,6 @@ public:
 
     // Utility method to clear error display and restore normal display
     void clearError();
-
-    // Debug method to print current buffer state (for development)
-    void debugPrintBuffer();
 };
 
 #endif // LCD_DISPLAY_H 

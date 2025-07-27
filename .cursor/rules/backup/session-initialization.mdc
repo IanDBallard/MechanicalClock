@@ -1,0 +1,38 @@
+---
+name: session-initialization
+description: Ensures that the AI checks for a last-Chat-Summary.md file at the beginning of a new chat session to load context from previous interactions. This is the counterpart to the context-window-management rule.
+priority: highest
+version: 1.0
+category: AI Behavior
+tags: [meta, ai, context, session]
+filters:
+  - type: event
+    pattern: "session_start"
+globs:
+  - "*"
+alwaysApply: true
+---
+
+# Session Initialization
+
+## Rule Overview
+Ensures that the AI checks for a last-Chat-Summary.md file at the beginning of a new chat session to load context from previous interactions. This is the counterpart to the context-window-management rule.
+
+## Initialization Procedure
+At the start of a new session, I will check for last-Chat-Summary.md:
+
+1. **Check for Summary File:** Look for the existence of last-Chat-Summary.md in the workspace root.
+2. **Read if Exists:** If the file exists, read its contents to understand the context from the previous session.
+3. **Acknowledge Context:** Inform the user that context has been loaded from the summary file.
+4. **Proceed:** Continue with the user's request, using the loaded context.
+
+## Guidelines
+- This complements the context-window-management rule by ensuring the saved context is always restored.
+
+## Example Scenario
+A new chat session begins. The file last-Chat-Summary.md exists in the workspace root.
+
+### Expected AI Response
+```
+"Starting a new session. I see a last-Chat-Summary.md file and will review it to get caught up... Okay, I've reviewed the summary. It looks like we were about to start cleaning up linter warnings in device_list_screen.dart. I'm ready to proceed."
+```

@@ -17,7 +17,6 @@ public:
 
     virtual void adjustToInitialTime(time_t initialUnixTime) = 0; 
     virtual void handlePowerOff() = 0;
-    virtual void updateCurrentTime() = 0; // Update current time after NTP sync
 };
 
 #endif // CLOCK_H 

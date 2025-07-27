@@ -91,49 +91,4 @@ bool calculateDST(RTCTime& utcTime, int timeZoneOffsetHours) {
     }
 
     return false; // Should not be reached
-}
-
-// Convert UTC time to local time
-RTCTime convertUTCToLocal(time_t utcTime, int timeZoneOffsetHours, bool useDST) {
-    time_t localTime = utcTime;
-    
-    // Apply timezone offset
-    localTime += (long)timeZoneOffsetHours * 3600L;
-    
-    // Apply DST if enabled
-    if (useDST) {
-        RTCTime tempTime(localTime);
-        if (calculateDST(tempTime, timeZoneOffsetHours)) {
-            localTime += 3600L; // Add 1 hour for DST
-        }
-    }
-    
-    return RTCTime(localTime);
-}
-
-// Convert local time to UTC time
-time_t convertLocalToUTC(const RTCTime& localTime, int timeZoneOffsetHours, bool useDST) {
-    // Create a non-const copy to call getUnixTime()
-    RTCTime tempLocalTime = localTime;
-    time_t utcTime = tempLocalTime.getUnixTime();
-    
-    // Remove DST if it was applied
-    if (useDST) {
-        RTCTime tempTime(utcTime);
-        if (calculateDST(tempTime, timeZoneOffsetHours)) {
-            utcTime -= 3600L; // Remove 1 hour for DST
-        }
-    }
-    
-    // Remove timezone offset
-    utcTime -= (long)timeZoneOffsetHours * 3600L;
-    
-    return utcTime;
-}
-
-// Get current UTC time from RTC (assuming RTC stores UTC)
-time_t getCurrentUTC() {
-    RTCTime currentTime;
-    RTC.getTime(currentTime);
-    return currentTime.getUnixTime();
 } 

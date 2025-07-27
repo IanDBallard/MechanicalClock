@@ -1,0 +1,53 @@
+# Terminal Command Execution Standards
+
+<rule>
+name: terminal_command_execution
+description: Enforces the use of bash shell with run button for all terminal command execution to eliminate paste buffer errors, escape sequence issues, and ensure reliable command execution.
+filters:
+  - type: content
+    pattern: "run_terminal_cmd"
+  - type: event
+    pattern: "terminal_command_request"
+actions:
+  - type: require
+    conditions:
+      - pattern: "bash"
+        message: "Always use bash shell for terminal commands, not PowerShell or other shells."
+      - pattern: "run_button"
+        message: "Always use the run button mechanism rather than manual copy/paste for terminal commands."
+  - type: reject
+    conditions:
+      - pattern: "manual_paste"
+        message: "Manual copy/paste of terminal commands leads to paste buffer errors and escape sequence corruption."
+      - pattern: "powershell_preference"
+        message: "PowerShell has more issues with quote escaping and special characters compared to bash."
+examples:
+  - input: |
+      # Bad: Manual copy/paste leading to corruption
+      [200~cd client_app/cat_tracker_app && flutter run --debug~
+      bash: [200~cd: command not found
+      
+      # Bad: PowerShell with quote escaping issues
+      git commit -m \"Complex message with quotes\"
+      
+      # Good: Bash with run button
+      run_terminal_cmd: cd client_app/cat_tracker_app && flutter run --debug
+      
+      # Good: Complex multi-line commands via run button
+      git add -A && git commit -m "Multi-line
+      commit message
+      with proper formatting"
+    output: "Reliable terminal command execution without paste buffer corruption"
+guidelines:
+  - "Always use bash shell for consistent Unix-style command support on Windows"
+  - "Always use run button to send commands directly to shell without clipboard involvement"
+  - "Especially important for complex commands with quotes, special characters, or multi-line content"
+  - "Eliminates bracketed paste mode interference and escape sequence corruption"
+  - "Provides consistent environment state maintenance across commands"
+  - "Essential for git operations, Flutter commands, and file operations"
+metadata:
+  priority: high
+  version: 1.0
+  category: "Development Environment"
+  tags: ["terminal", "bash", "reliability", "command-execution"]
+</rule>

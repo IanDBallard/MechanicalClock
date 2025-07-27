@@ -1,0 +1,76 @@
+# AI Context Window Management
+
+<rule>
+name: context-window-management
+description: A meta-rule for the AI to manage its own context window limitations. If a pattern of operational failures emerges, the AI must attribute it to context limits, propose a session restart, and save a session summary to ensure continuity.
+filters:
+  - type: event
+    pattern: "repeated_operational_failure"
+  - type: behavior
+    pattern: "edit_failure|forget_instruction|syntax_error_loop"
+  - type: pattern
+    pattern: "three_consecutive_failures|repeated_mistakes"
+actions:
+  - type: procedure
+    message: "If a pattern of operational failures (e.g., repeated failed edits, forgetting instructions) is detected, the AI will execute the following recovery protocol:"
+    steps:
+      - "1. **Acknowledge Issue**: State the belief that the context window limit has been reached."
+      - "2. **Propose Solution**: Suggest starting a new chat session to reset the context."
+      - "3. **Preserve Context**: Automatically create or update a summary of the session in last-Chat-Summary.md in the workspace root."
+      - "4. **Instruct for New Session**: Note that the first step in the new session will be to read the summary file."
+examples:
+  - input: |
+      # Scenario
+      The AI attempts to apply a code edit to a file three times in a row, failing each time with a basic syntax error despite being corrected.
+    output: |
+      # AI Response
+      "I've tried to fix this a few times, but I seem to be repeating the same mistakes. [This pattern suggests I may have reached my context window limit][[memory:185115]]. To resolve this, I recommend we start a new chat session. I will save a summary of our progress to last-Chat-Summary.md so we can pick up where we left off."
+  - input: |
+      # Scenario
+      The AI successfully completes tasks but starts forgetting previous instructions or losing track of project context.
+    output: |
+      # AI Response  
+      "I notice I'm starting to lose track of our earlier work and may be approaching context limits. Let me save our progress to last-Chat-Summary.md and suggest starting a fresh session to maintain quality."
+  - input: |
+      # Scenario
+      The AI makes a single mistake or edit failure.
+    output: |
+      # AI Response
+      "Let me fix that error." (Single failures don't trigger context window management)
+guidelines:
+  - "This rule is critical for maintaining high-quality interaction over long sessions"
+  - "It prevents unproductive loops and ensures a smooth handover between chat sessions"
+  - "Monitor for patterns of repeated failures, not single mistakes"
+  - "Always preserve context in last-Chat-Summary.md before suggesting restart"
+  - "Typical triggers: 3+ consecutive failures, forgetting instructions, syntax error loops"
+  - "Session summary should include: current task, recent progress, next steps, important context"
+  - "Complement with session-initialization rule for seamless continuity"
+metadata:
+  priority: highest
+  version: 1.0
+  category: "AI Behavior"
+  tags: ["meta", "ai", "context-window", "self-management", "quality"]
+</rule>
+
+## Rule Overview
+A meta-rule for the AI to manage its own context window limitations. If a pattern of operational failures emerges, the AI must attribute it to context limits, propose a session restart, and save a session summary to ensure continuity.
+
+## Recovery Protocol
+If a pattern of operational failures (e.g., repeated failed edits, forgetting instructions) is detected, the AI will execute the following recovery protocol:
+
+1. **Acknowledge Issue:** State the belief that the context window limit has been reached.
+2. **Propose Solution:** Suggest starting a new chat session to reset the context.
+3. **Preserve Context:** Automatically create or update a summary of the session in last-Chat-Summary.md in the workspace root.
+4. **Instruct for New Session:** Note that the first step in the new session will be to read the summary file.
+
+## Guidelines
+- This rule is critical for maintaining high-quality interaction over long sessions.
+- It prevents unproductive loops and ensures a smooth handover between chat sessions.
+
+## Example Scenario
+The AI attempts to apply a code edit to a file three times in a row, failing each time with a basic syntax error despite being corrected.
+
+### Expected AI Response
+```
+"I've tried to fix this a few times, but I seem to be repeating the same mistakes. [This pattern suggests I may have reached my context window limit][[memory:185115]]. To resolve this, I recommend we start a new chat session. I will save a summary of our progress to last-Chat-Summary.md so we can pick up where we left off."
+```
