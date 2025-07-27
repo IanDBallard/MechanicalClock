@@ -44,12 +44,20 @@ struct TestSuite {
     }
     
     void run() {
+        Serial.print("DEBUG: TestSuite::run() - Starting suite: ");
+        Serial.println(name);
         Serial.println("=== Running Test Suite: " + name + " ===");
         totalDuration = millis();
         passedTests = 0;
         failedTests = 0;
         
+        Serial.print("DEBUG: TestSuite::run() - Number of tests in suite: ");
+        Serial.println(tests.size());
+        
         for (auto& test : tests) {
+            Serial.print("DEBUG: TestSuite::run() - About to run test: ");
+            Serial.println(test.name);
+            
             if (!test.shouldRun) {
                 Serial.println("Skipping: " + test.name);
                 continue;
@@ -59,14 +67,23 @@ struct TestSuite {
             bool testPassed = true;
             String errorMessage = "";
             
+            Serial.print("DEBUG: TestSuite::run() - Executing test: ");
+            Serial.println(test.name);
+            
             try {
                 test.testFunction();
+                Serial.print("DEBUG: TestSuite::run() - Test completed without exception: ");
+                Serial.println(test.name);
             } catch (const String& e) {
                 testPassed = false;
                 errorMessage = e;
+                Serial.print("DEBUG: TestSuite::run() - Test threw String exception: ");
+                Serial.println(test.name);
             } catch (...) {
                 testPassed = false;
                 errorMessage = "Unknown exception";
+                Serial.print("DEBUG: TestSuite::run() - Test threw unknown exception: ");
+                Serial.println(test.name);
             }
             
             unsigned long endTime = millis();
@@ -82,6 +99,9 @@ struct TestSuite {
                     Serial.println("  Error: " + errorMessage);
                 }
             }
+            
+            Serial.print("DEBUG: TestSuite::run() - Completed test: ");
+            Serial.println(test.name);
         }
         
         totalDuration = millis() - totalDuration;
@@ -89,6 +109,9 @@ struct TestSuite {
         Serial.println("Passed: " + String(passedTests) + ", Failed: " + String(failedTests));
         Serial.println("Total Duration: " + String(totalDuration) + "ms");
         Serial.println();
+        
+        Serial.print("DEBUG: TestSuite::run() - Completed suite: ");
+        Serial.println(name);
     }
 };
 
@@ -99,21 +122,34 @@ private:
     
 public:
     void addSuite(const TestSuite& suite) {
+        Serial.print("DEBUG: TestRegistry::addSuite() - Adding suite: ");
+        Serial.println(suite.name);
         suites.push_back(suite);
+        Serial.print("DEBUG: TestRegistry::addSuite() - Total suites now: ");
+        Serial.println(suites.size());
     }
     
     void runAllTests() {
+        Serial.println("DEBUG: TestRegistry::runAllTests() - Starting test execution");
         Serial.println("==========================================");
         Serial.println("           UNIT TEST FRAMEWORK");
         Serial.println("==========================================");
         Serial.println();
         
         unsigned long totalStartTime = millis();
+        Serial.println("DEBUG: TestRegistry::runAllTests() - Total start time recorded");
         int totalPassed = 0;
         int totalFailed = 0;
         
+        Serial.print("DEBUG: TestRegistry::runAllTests() - Number of test suites: ");
+        Serial.println(suites.size());
+        
         for (auto& suite : suites) {
+            Serial.print("DEBUG: TestRegistry::runAllTests() - About to run suite: ");
+            Serial.println(suite.name);
             suite.run();
+            Serial.print("DEBUG: TestRegistry::runAllTests() - Completed suite: ");
+            Serial.println(suite.name);
             totalPassed += suite.passedTests;
             totalFailed += suite.failedTests;
         }
@@ -121,19 +157,15 @@ public:
         unsigned long totalEndTime = millis();
         unsigned long totalDuration = totalEndTime - totalStartTime;
         
+        Serial.println("DEBUG: TestRegistry::runAllTests() - All suites completed, generating summary");
         Serial.println("==========================================");
         Serial.println("           FINAL RESULTS");
         Serial.println("==========================================");
         Serial.println("Total Tests Passed: " + String(totalPassed));
         Serial.println("Total Tests Failed: " + String(totalFailed));
         Serial.println("Total Duration: " + String(totalDuration) + "ms");
-        
-        if (totalFailed == 0) {
-            Serial.println("🎉 ALL TESTS PASSED! 🎉");
-        } else {
-            Serial.println("❌ SOME TESTS FAILED ❌");
-        }
         Serial.println("==========================================");
+        Serial.println("DEBUG: TestRegistry::runAllTests() - Test execution completed");
     }
     
     void runSuite(const String& suiteName) {

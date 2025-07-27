@@ -1,48 +1,115 @@
 #!/bin/bash
 
-# Unit Test Runner for Arduino R4 WiFi Mechanical Clock
-# This script uploads and runs the unit tests
+# Test Runner Script for Mechanical Clock Project
+# Runs each test suite individually to isolate issues
 
-echo "🧪 Starting Unit Tests for Mechanical Clock V2.0.0-alpha"
-echo "=================================================="
-
-# Check if we're in the right directory
-if [ ! -f "platformio.ini" ]; then
-    echo "❌ Error: platformio.ini not found. Please run this script from the project root."
-    exit 1
-fi
-
-# Check if test directory exists
-if [ ! -d "test" ]; then
-    echo "❌ Error: test/ directory not found."
-    exit 1
-fi
-
-echo "📋 Test Framework Overview:"
-echo "  - 49 total tests across 4 test suites"
-echo "  - TimeUtils: 12 tests (DST, time conversions)"
-echo "  - LED: 10 tests (state management, pin control)"
-echo "  - NetworkManager: 15 tests (WiFi, NTP, timezone)"
-echo "  - StateManager: 12 tests (state machine, transitions)"
+echo "=========================================="
+echo "    MECHANICAL CLOCK TEST RUNNER"
+echo "=========================================="
 echo ""
 
-# Build and upload test code
-echo "🚀 Building and uploading test code..."
-if pio run --target upload; then
-    echo "✅ Upload successful!"
-else
-    echo "❌ Upload failed!"
-    exit 1
-fi
+# Function to run a single test
+run_single_test() {
+    local test_name=$1
+    local test_file=$2
+    
+    echo "Running test: $test_name"
+    echo "----------------------------------------"
+    
+    # Create a temporary test runner for this specific test
+    cat > test/TempTestRunner.cpp << EOF
+#include "TestFramework.h"
 
-echo ""
-echo "📊 Running tests (opening serial monitor)..."
-echo "Press Ctrl+C to stop monitoring"
+// Declare the specific test setup function
+extern void $test_file();
+
+// Global test registry
+TestRegistry testRegistry;
+
+void setup() {
+    Serial.begin(115200);
+    delay(1000);
+    
+    Serial.println("==========================================");
+    Serial.println("           SINGLE TEST RUNNER");
+    Serial.println("==========================================");
+    Serial.println("Running: $test_name");
+    Serial.println("");
+    
+    $test_file();
+    testRegistry.runAllTests();
+    
+    Serial.println("==========================================");
+    Serial.println("           TEST COMPLETED");
+    Serial.println("==========================================");
+}
+
+void loop() {
+    delay(1000);
+}
+EOF
+
+    # Update platformio_test.ini to use this specific test
+    cat > test/platformio_test.ini << EOF
+[env:uno_r4_wifi_test]
+platform = arduino
+board = uno_r4_wifi
+framework = arduino
+
+; Test-specific build flags
+build_flags = 
+    -DARDUINO_TESTING=1
+    -DTEST_VERBOSE=1
+
+; Libraries needed for testing
+lib_deps = 
+    AccelStepper
+    LiquidCrystal_I2C
+
+; Monitor settings for test output
+monitor_speed = 115200
+monitor_filters = 
+    time
+    colorize
+
+; Upload settings
+upload_speed = 921600
+
+; Test environment configuration - use specific test
+build_src_filter = +<*> -<../src/main.cpp> -<main.cpp> -<TestRunner.cpp> -<TestRunnerMinimal.cpp> -<MinimalTest.cpp> -<TestFramework.cpp> +<TempTestRunner.cpp> +<$3>
+EOF
+
+    # Run the test
+    echo "Building and uploading test..."
+    pio test --environment uno_r4_wifi_test --upload-port COM5
+    
+    echo ""
+    echo "Test completed: $test_name"
+    echo "----------------------------------------"
+    echo ""
+}
+
+# List of tests to run
+echo "Available tests:"
+echo "1. TimeUtilsTest"
+echo "2. LEDTest" 
+echo "3. NetworkManagerTest"
+echo "4. StateManagerTest"
+echo "5. PowerUpTest"
+echo "6. PowerOffRecoveryTest"
 echo ""
 
-# Run tests and monitor output
-pio device monitor --filter time,colorize
+# Run each test individually
+run_single_test "TimeUtilsTest" "setupTimeUtilsTests" "TimeUtilsTest.cpp"
+run_single_test "LEDTest" "setupLEDTests" "LEDTest.cpp"
+run_single_test "NetworkManagerTest" "setupNetworkManagerTests" "NetworkManagerTest.cpp"
+run_single_test "StateManagerTest" "setupStateManagerTests" "StateManagerTest.cpp"
+run_single_test "PowerUpTest" "setupPowerUpTests" "PowerUpTest.cpp"
+run_single_test "PowerOffRecoveryTest" "setupPowerOffRecoveryTests" "PowerOffRecoveryTest.cpp"
 
-echo ""
-echo "🏁 Test run completed!"
-echo "Check the output above for test results." 
+echo "=========================================="
+echo "    ALL TESTS COMPLETED"
+echo "=========================================="
+
+# Clean up temporary files
+rm -f test/TempTestRunner.cpp 

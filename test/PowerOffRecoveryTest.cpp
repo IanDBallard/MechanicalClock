@@ -12,7 +12,7 @@ public:
     LCDDisplay lcdDisplay;
     RTClock rtcInstance;
     MechanicalClock clock;
-    const int TEST_EEPROM_ADDRESS_INITIAL_TIME = 100;
+    const int TEST_EEPROM_ADDRESS_INITIAL_TIME = 0; // Use same address as production code
     
     PowerOffRecoveryTestFixture() 
         : lcdDisplay(0x27), 

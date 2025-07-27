@@ -252,19 +252,46 @@ void testLCDDisplayRecoveryScenarios() {
 }
 
 void setupPowerUpTests() {
+    Serial.println("DEBUG: setupPowerUpTests() - Starting PowerUp test setup");
+    
+    Serial.println("DEBUG: setupPowerUpTests() - Adding testResetCauseDetection");
     testSuite_PowerUpTest.addTest("testResetCauseDetection", testResetCauseDetection);
+    
+    Serial.println("DEBUG: setupPowerUpTests() - Adding testEEPROMTimeValidation");
     testSuite_PowerUpTest.addTest("testEEPROMTimeValidation", testEEPROMTimeValidation);
+    
+    Serial.println("DEBUG: setupPowerUpTests() - Adding testTimeRecoveryLogic");
     testSuite_PowerUpTest.addTest("testTimeRecoveryLogic", testTimeRecoveryLogic);
+    
+    Serial.println("DEBUG: setupPowerUpTests() - Adding testMechanicalClockPowerRecovery");
     testSuite_PowerUpTest.addTest("testMechanicalClockPowerRecovery", testMechanicalClockPowerRecovery);
+    
+    Serial.println("DEBUG: setupPowerUpTests() - Adding testNetworkRecoveryAfterPowerUp");
     testSuite_PowerUpTest.addTest("testNetworkRecoveryAfterPowerUp", testNetworkRecoveryAfterPowerUp);
+    
+    Serial.println("DEBUG: setupPowerUpTests() - Adding testStateRecoveryAfterPowerUp");
     testSuite_PowerUpTest.addTest("testStateRecoveryAfterPowerUp", testStateRecoveryAfterPowerUp);
+    
+    Serial.println("DEBUG: setupPowerUpTests() - Adding testPowerDownScenarios");
     testSuite_PowerUpTest.addTest("testPowerDownScenarios", testPowerDownScenarios);
+    
+    Serial.println("DEBUG: setupPowerUpTests() - Adding testEEPROMCorruptionScenarios");
     testSuite_PowerUpTest.addTest("testEEPROMCorruptionScenarios", testEEPROMCorruptionScenarios);
+    
+    Serial.println("DEBUG: setupPowerUpTests() - Adding testPowerUpTimingScenarios");
     testSuite_PowerUpTest.addTest("testPowerUpTimingScenarios", testPowerUpTimingScenarios);
+    
+    Serial.println("DEBUG: setupPowerUpTests() - Adding testStepperMotorRecoveryScenarios");
     testSuite_PowerUpTest.addTest("testStepperMotorRecoveryScenarios", testStepperMotorRecoveryScenarios);
+    
+    Serial.println("DEBUG: setupPowerUpTests() - Adding testLCDDisplayRecoveryScenarios");
     testSuite_PowerUpTest.addTest("testLCDDisplayRecoveryScenarios", testLCDDisplayRecoveryScenarios);
     
+    Serial.println("DEBUG: setupPowerUpTests() - About to register with global test registry");
     // Register with global test registry
     extern TestRegistry testRegistry;
     testRegistry.addSuite(testSuite_PowerUpTest);
+    Serial.println("DEBUG: setupPowerUpTests() - Successfully registered with test registry");
+    
+    Serial.println("DEBUG: setupPowerUpTests() - PowerUp test setup completed");
 } 

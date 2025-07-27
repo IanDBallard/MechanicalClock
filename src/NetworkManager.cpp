@@ -5,6 +5,10 @@
 #include <string.h>    // For strncpy, memset
 #include "TimeUtils.h" // For calculateDST
 
+
+
+
+
 // --- Constructor ---
 NetworkManager::NetworkManager(const char* apSsid, IPAddress ntpServerIP, unsigned int localPort,
                                unsigned long wifiConnectTimeout, int maxNtpRetries,
@@ -46,9 +50,29 @@ void NetworkManager::begin() {
     // Basic validation of loaded credentials
     // Check isValid flag and non-zero length for SSID
     if (_credentials.isValid && strlen(_credentials.ssid) > 0 && strlen(_credentials.ssid) < sizeof(_credentials.ssid)) {
-        Serial.println("✓ Valid WiFi credentials found in EEPROM.");
-        Serial.print("Loaded SSID: "); Serial.println(_credentials.ssid);
-        _configModeRequired = false; // No config mode needed initially
+        // Additional check for corrupted data (non-printable characters)
+        bool hasCorruptedData = false;
+        for (int i = 0; i < strlen(_credentials.ssid); i++) {
+            if (_credentials.ssid[i] < 32 || _credentials.ssid[i] > 126) {
+                hasCorruptedData = true;
+                break;
+            }
+        }
+        
+        if (hasCorruptedData) {
+            Serial.println("✗ WiFi credentials corrupted in EEPROM. Clearing and entering config mode.");
+            _configModeRequired = true;
+            // Clear corrupted data
+            memset(_credentials.ssid, 0, sizeof(_credentials.ssid));
+            memset(_credentials.password, 0, sizeof(_credentials.password));
+            _credentials.isValid = false;
+            // Save cleared credentials to EEPROM
+            EEPROM.put(EEPROM_ADDR_WIFI_CRED_START, _credentials);
+        } else {
+            Serial.println("✓ Valid WiFi credentials found in EEPROM.");
+            Serial.print("Loaded SSID: "); Serial.println(_credentials.ssid);
+            _configModeRequired = false; // No config mode needed initially
+        }
     } else {
         Serial.println("✗ No valid WiFi credentials found in EEPROM. Entering config mode.");
         _configModeRequired = true; // Force config mode
@@ -132,6 +156,8 @@ void NetworkManager::setupAccessPoint() {
         Serial.println("\nAP failed to start listening within timeout!");
         // Force config mode or error state if AP fails
         _configModeRequired = true; 
+        
+
     }
 }
 
@@ -259,22 +285,16 @@ bool NetworkManager::syncTimeWithRTC(RTClock& rtcInstance) {
                     isDST_now = calculateDST(utcPlusStandardOffsetTime, _timeZoneOffsetHours); // Use TimeUtils calculateDST
                 }
                 
-                epoch += (long)_timeZoneOffsetHours * 3600L; // Apply standard timezone offset
-                if (isDST_now) {
-                    epoch += 3600L; // Add 1 hour for DST
-                    Serial.println("DST is active, adding 1 hour.");
-                }
-                // --- End Time Zone/DST Application ---
-                
-                RTCTime timeToSet(epoch); // Create RTCTime object with adjusted epoch
-                rtcInstance.setTime(timeToSet); // Set the onboard RTC
+                // Store UTC time in RTC (timezone/DST conversion happens only for display)
+                RTCTime timeToSet(epoch); // Create RTCTime object with UTC epoch
+                rtcInstance.setTime(timeToSet); // Set the onboard RTC to UTC
                 _lastNTPSyncTime = millis();    // Record sync time (millis() timestamp)
                 
                 Serial.println("✓ RTC synchronized with network time!");
                 Serial.print("Current UTC Unix Time (received): "); Serial.println(secsSince1900 - seventyYears);
                 Serial.print("Applied TZ Offset: "); Serial.print(_timeZoneOffsetHours); Serial.println(" hours");
                 Serial.print("DST Active: "); Serial.println(isDST_now ? "Yes" : "No");
-                Serial.print("Set RTC to (Local Time): "); Serial.println(timeToSet.toString());
+                Serial.print("Set RTC to (UTC): "); Serial.println(timeToSet.toString());
                 return true;
             }
             delay(10);
@@ -523,15 +543,30 @@ void NetworkManager::saveCredentials(const char* newSsid, const char* newPasswor
 // --- Handle Captive Portal (main loop entry) ---
 bool NetworkManager::handleConfigPortal(String& errorMessage) {
     static unsigned long lastDebugPrint = 0;
+    static unsigned long lastAPRestart = 0;
+    static int restartCount = 0;
+    
     if (millis() - lastDebugPrint > 5000) {
         lastDebugPrint = millis();
         Serial.print("AP IP: "); Serial.println(WiFi.localIP());
+        Serial.print("AP Status: "); Serial.println(WiFi.status());
     }
 
-    if (WiFi.status() != WL_AP_LISTENING) { // If AP isn't listening, try to start it
+    // Only attempt AP restart once every 30 seconds to prevent restart loops
+    // Check for both WL_AP_LISTENING (7) and WL_AP_CONNECTED (8) as valid AP states
+    if (WiFi.status() != WL_AP_LISTENING && WiFi.status() != WL_AP_CONNECTED && (millis() - lastAPRestart > 30000)) {
         Serial.println("AP not listening, attempting to start AP...");
+        lastAPRestart = millis();
+        restartCount++;
+        
+        if (restartCount > 3) {
+            Serial.println("Too many AP restarts, giving up!");
+            errorMessage = "AP Unstable";
+            return false;
+        }
+        
         setupAccessPoint(); // Call the method to set up AP
-        if (WiFi.status() != WL_AP_LISTENING) { // If it still failed to listen
+        if (WiFi.status() != WL_AP_LISTENING && WiFi.status() != WL_AP_CONNECTED) { // If it still failed to listen
             Serial.println("Failed to re-setup AP!");
             errorMessage = "AP Failed to Start";
             return false; // Indicate failure to transition
@@ -541,6 +576,7 @@ bool NetworkManager::handleConfigPortal(String& errorMessage) {
     WiFiClient client = _server.available();
     if (client) {
         Serial.println("\n--- New Client Connected to AP ---");
+        Serial.print("Client IP: "); Serial.println(client.remoteIP());
         String currentLine = "";
         unsigned long connectionStartTime = millis();
         

@@ -1,7 +1,7 @@
 #include "TestFramework.h"
 
 // Declare the specific test setup function
-extern void setupTimeUtilsTests();
+extern void setupPowerOffRecoveryTests();
 
 // Global test registry
 TestRegistry testRegistry;
@@ -13,10 +13,10 @@ void setup() {
     Serial.println("==========================================");
     Serial.println("           SIMPLE TEST RUNNER");
     Serial.println("==========================================");
-    Serial.println("Running: TimeUtilsTest");
+    Serial.println("Running: PowerOffRecoveryTest");
     Serial.println("");
     
-    setupTimeUtilsTests();
+    setupPowerOffRecoveryTests();
     testRegistry.runAllTests();
     
     Serial.println("==========================================");

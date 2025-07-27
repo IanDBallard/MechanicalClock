@@ -1,344 +1,19 @@
 #include <Arduino.h> // Standard Arduino functions (pinMode, delay, etc.)
 
 #ifdef ARDUINO_TESTING
-// Arduino-based unit testing environment
-#include <EEPROM.h>
-
-// Test constants - use different names to avoid conflicts
-const int TEST_EEPROM_ADDRESS = 100;
-const long TEST_SECONDS_IN_12_HOURS = 12 * 60 * 60; // 43200 seconds
-const long TEST_SECONDS_PER_STEP = 18;
-
-// Mock RTC for testing
-time_t mockCurrentTime = 0;
-
-// Test results
-int testsPassed = 0;
-int testsFailed = 0;
-
-// Helper function to calculate expected steps
-long calculateExpectedSteps(time_t powerOffTime, time_t currentTime) {
-    // Calculate positions within 12-hour cycle
-    long powerOffPosition = powerOffTime % TEST_SECONDS_IN_12_HOURS;
-    long currentPosition = currentTime % TEST_SECONDS_IN_12_HOURS;
-    
-    // Calculate shortest path distance
-    long distance = currentPosition - powerOffPosition;
-    
-    // Handle wrap-around for shortest path
-    if (distance > TEST_SECONDS_IN_12_HOURS / 2) {
-        distance -= TEST_SECONDS_IN_12_HOURS;
-    } else if (distance < -TEST_SECONDS_IN_12_HOURS / 2) {
-        distance += TEST_SECONDS_IN_12_HOURS;
-    }
-    
-    // Convert to steps
-    return distance / TEST_SECONDS_PER_STEP;
-}
-
-// Test fixture functions
-void clearEEPROM() {
-    EEPROM.put(TEST_EEPROM_ADDRESS, (time_t)0);
-}
-
-void simulatePowerOff(time_t powerOffTime) {
-    EEPROM.put(TEST_EEPROM_ADDRESS, powerOffTime);
-}
-
-time_t getPowerOffTime() {
-    time_t storedTime;
-    EEPROM.get(TEST_EEPROM_ADDRESS, storedTime);
-    return storedTime;
-}
-
-void simulatePowerOn(time_t currentTime) {
-    mockCurrentTime = currentTime;
-    
-    // Call adjustToInitialTime with stored power-off time
-    time_t powerOffTime = getPowerOffTime();
-    
-    Serial.print("Power-off time: ");
-    Serial.println(powerOffTime);
-    Serial.print("Current time: ");
-    Serial.println(currentTime);
-    
-    if (powerOffTime == 0) {
-        Serial.println("No power-off time - setting position to current time");
-    } else {
-        long expectedSteps = calculateExpectedSteps(powerOffTime, currentTime);
-        Serial.print("Expected steps: ");
-        Serial.println(expectedSteps);
-    }
-}
-
-// Test functions
-void testNoPowerOffTime() {
-    Serial.println("\n--- Test 1: No Power-Off Time ---");
-    clearEEPROM();
-    
-    time_t currentTime = 1753630862;
-    simulatePowerOn(currentTime);
-    
-    time_t storedTime = getPowerOffTime();
-    if (storedTime == 0) {
-        Serial.println("✓ No power-off time test PASSED");
-        testsPassed++;
-    } else {
-        Serial.println("✗ No power-off time test FAILED");
-        testsFailed++;
-    }
-}
-
-void testShortPowerOff() {
-    Serial.println("\n--- Test 2: Short Power-Off (1 hour) ---");
-    clearEEPROM();
-    
-    time_t powerOffTime = 1753627262; // 1 hour ago
-    time_t currentTime = 1753630862;  // Current time
-    
-    simulatePowerOff(powerOffTime);
-    simulatePowerOn(currentTime);
-    
-    long expectedSteps = calculateExpectedSteps(powerOffTime, currentTime);
-    Serial.print("Expected steps for 1 hour: ");
-    Serial.println(expectedSteps);
-    
-    // Verify EEPROM was cleared after reading (simulated)
-    time_t storedTime = getPowerOffTime();
-    if (storedTime == powerOffTime) { // Still there since we're not actually calling adjustToInitialTime
-        Serial.println("✓ Short power-off test PASSED");
-        testsPassed++;
-    } else {
-        Serial.println("✗ Short power-off test FAILED");
-        testsFailed++;
-    }
-}
-
-void testLongPowerOff() {
-    Serial.println("\n--- Test 3: Long Power-Off (6 hours) ---");
-    clearEEPROM();
-    
-    time_t powerOffTime = 1753609262; // 6 hours ago
-    time_t currentTime = 1753630862;  // Current time
-    
-    simulatePowerOff(powerOffTime);
-    simulatePowerOn(currentTime);
-    
-    long expectedSteps = calculateExpectedSteps(powerOffTime, currentTime);
-    Serial.print("Expected steps for 6 hours: ");
-    Serial.println(expectedSteps);
-    
-    time_t storedTime = getPowerOffTime();
-    if (storedTime == powerOffTime) {
-        Serial.println("✓ Long power-off test PASSED");
-        testsPassed++;
-    } else {
-        Serial.println("✗ Long power-off test FAILED");
-        testsFailed++;
-    }
-}
-
-void testPowerOffAcross12HourBoundary() {
-    Serial.println("\n--- Test 4: Power-Off Across 12-Hour Boundary ---");
-    clearEEPROM();
-    
-    // Power off at 11:59 PM, power on at 12:01 AM (next day)
-    time_t powerOffTime = 1753627140; // 11:59 PM
-    time_t currentTime = 1753627260;  // 12:01 AM (next day)
-    
-    simulatePowerOff(powerOffTime);
-    simulatePowerOn(currentTime);
-    
-    long expectedSteps = calculateExpectedSteps(powerOffTime, currentTime);
-    Serial.print("Expected steps across 12-hour boundary: ");
-    Serial.println(expectedSteps);
-    
-    time_t storedTime = getPowerOffTime();
-    if (storedTime == powerOffTime) {
-        Serial.println("✓ 12-hour boundary test PASSED");
-        testsPassed++;
-    } else {
-        Serial.println("✗ 12-hour boundary test FAILED");
-        testsFailed++;
-    }
-}
-
-void testPowerOffExactly12Hours() {
-    Serial.println("\n--- Test 5: Power-Off Exactly 12 Hours ---");
-    clearEEPROM();
-    
-    time_t powerOffTime = 1753587662; // 12 hours ago
-    time_t currentTime = 1753630862;  // Current time
-    
-    simulatePowerOff(powerOffTime);
-    simulatePowerOn(currentTime);
-    
-    long expectedSteps = calculateExpectedSteps(powerOffTime, currentTime);
-    Serial.print("Expected steps for exactly 12 hours: ");
-    Serial.println(expectedSteps);
-    
-    time_t storedTime = getPowerOffTime();
-    if (storedTime == powerOffTime) {
-        Serial.println("✓ Exactly 12 hours test PASSED");
-        testsPassed++;
-    } else {
-        Serial.println("✗ Exactly 12 hours test FAILED");
-        testsFailed++;
-    }
-}
-
-void testInvalidFuturePowerOffTime() {
-    Serial.println("\n--- Test 6: Invalid Future Power-Off Time ---");
-    clearEEPROM();
-    
-    time_t powerOffTime = 1753634462; // 1 hour in future
-    time_t currentTime = 1753630862;  // Current time
-    
-    simulatePowerOff(powerOffTime);
-    simulatePowerOn(currentTime);
-    
-    long expectedSteps = calculateExpectedSteps(powerOffTime, currentTime);
-    Serial.print("Expected steps for future time: ");
-    Serial.println(expectedSteps);
-    
-    time_t storedTime = getPowerOffTime();
-    if (storedTime == powerOffTime) {
-        Serial.println("✓ Invalid future time test PASSED");
-        testsPassed++;
-    } else {
-        Serial.println("✗ Invalid future time test FAILED");
-        testsFailed++;
-    }
-}
-
-void testPowerOffTimeEqualsCurrentTime() {
-    Serial.println("\n--- Test 7: Power-Off Time Equals Current Time ---");
-    clearEEPROM();
-    
-    time_t powerOffTime = 1753630862; // Same as current time
-    time_t currentTime = 1753630862;  // Current time
-    
-    simulatePowerOff(powerOffTime);
-    simulatePowerOn(currentTime);
-    
-    long expectedSteps = calculateExpectedSteps(powerOffTime, currentTime);
-    Serial.print("Expected steps for same time: ");
-    Serial.println(expectedSteps);
-    
-    if (expectedSteps == 0) {
-        Serial.println("✓ Power-off equals current time test PASSED");
-        testsPassed++;
-    } else {
-        Serial.println("✗ Power-off equals current time test FAILED");
-        testsFailed++;
-    }
-}
-
-void testStepCalculationSanity() {
-    Serial.println("\n--- Test 8: Step Calculation Sanity Check ---");
-    clearEEPROM();
-    
-    // Test various time differences and verify steps are reasonable
-    time_t baseTime = 1753630862;
-    bool allReasonable = true;
-    
-    for (int hours = 1; hours <= 12; hours++) {
-        time_t powerOffTime = baseTime - (hours * 3600);
-        time_t currentTime = baseTime;
-        
-        long expectedSteps = calculateExpectedSteps(powerOffTime, currentTime);
-        
-        // Steps should be reasonable (not more than ~2400 for 12 hours)
-        if (abs(expectedSteps) >= 2400) {
-            allReasonable = false;
-        }
-        
-        Serial.print("Hours: ");
-        Serial.print(hours);
-        Serial.print(", Steps: ");
-        Serial.println(expectedSteps);
-    }
-    
-    if (allReasonable) {
-        Serial.println("✓ Step calculation sanity test PASSED");
-        testsPassed++;
-    } else {
-        Serial.println("✗ Step calculation sanity test FAILED");
-        testsFailed++;
-    }
-}
-
-void testEEPROMCorruptionHandling() {
-    Serial.println("\n--- Test 9: EEPROM Corruption Handling ---");
-    clearEEPROM();
-    
-    // Write invalid values to EEPROM
-    EEPROM.put(TEST_EEPROM_ADDRESS, (time_t)-1);
-    simulatePowerOn(1753630862);
-    
-    time_t storedTime = getPowerOffTime();
-    Serial.print("Stored time after writing -1: ");
-    Serial.println(storedTime);
-    
-    // Write very large value
-    EEPROM.put(TEST_EEPROM_ADDRESS, (time_t)9999999999);
-    simulatePowerOn(1753630862);
-    
-    storedTime = getPowerOffTime();
-    Serial.print("Stored time after writing large value: ");
-    Serial.println(storedTime);
-    
-    Serial.println("✓ EEPROM corruption handling test PASSED");
-    testsPassed++;
-}
-
-void runPowerOffRecoveryTests() {
-    Serial.println("\n\n=== POWER-OFF RECOVERY TEST SUITE ===");
-    Serial.println("Testing various power-off scenarios and recovery logic...");
-    
-    testsPassed = 0;
-    testsFailed = 0;
-    
-    testNoPowerOffTime();
-    testShortPowerOff();
-    testLongPowerOff();
-    testPowerOffAcross12HourBoundary();
-    testPowerOffExactly12Hours();
-    testInvalidFuturePowerOffTime();
-    testPowerOffTimeEqualsCurrentTime();
-    testStepCalculationSanity();
-    testEEPROMCorruptionHandling();
-    
-    Serial.println("\n=== TEST RESULTS ===");
-    Serial.print("Tests PASSED: ");
-    Serial.println(testsPassed);
-    Serial.print("Tests FAILED: ");
-    Serial.println(testsFailed);
-    Serial.print("Total tests: ");
-    Serial.println(testsPassed + testsFailed);
-    
-    if (testsFailed == 0) {
-        Serial.println("🎉 ALL POWER-OFF RECOVERY TESTS PASSED! 🎉");
-    } else {
-        Serial.println("⚠️  SOME TESTS FAILED - REVIEW REQUIRED ⚠️");
-    }
-}
-
+// Simple test to see if Arduino is working
 void setup() {
     Serial.begin(115200);
-    delay(3000); // Wait longer for Serial to be ready
-    Serial.println("\n\n\n=== ARDUINO POWER-OFF RECOVERY TEST SUITE STARTING ===");
-    
-    // Run power-off recovery tests
-    runPowerOffRecoveryTests();
-    
-    Serial.println("=== ALL TESTS COMPLETED ===");
-    Serial.println("Arduino will continue running for monitoring...\n");
+    delay(2000); // Wait for Serial to be ready
+    Serial.println("=== ARDUINO TEST STARTING ===");
+    Serial.println("If you see this, the Arduino is working!");
+    Serial.println("Current time: " + String(millis()) + "ms");
+    Serial.println("=== TEST COMPLETE ===");
 }
 
 void loop() {
-    delay(10000);
-    Serial.println("Test environment still running: " + String(millis()) + "ms");
+    delay(5000);
+    Serial.println("Arduino is still alive: " + String(millis()) + "ms");
 }
 
 #else
@@ -388,7 +63,7 @@ const unsigned long WIFI_CONNECT_TIMEOUT = 30000; // 30 seconds
 const int MAX_NTP_RETRIES = 3;
 const unsigned long NTP_RETRY_DELAY = 5000; // 5 seconds
 const unsigned long NTP_SYNC_INTERVAL = 3600000UL; // 1 hour (in milliseconds)
-const int TIME_ZONE_OFFSET_HOURS = -5; // EST (Eastern Standard Time) offset from UTC
+const int TIME_ZONE_OFFSET_HOURS = -4; // EDT (Eastern Daylight Time) offset from UTC
 const bool USE_DST_AUTO_CALC = true;    // Enable automatic DST calculation
 
 // --- Global Renesas Reset Status Register Access ---
@@ -468,84 +143,104 @@ void setup() {
     // Initialize Serial communication for debugging
     Serial.begin(115200);
     delay(1000); // Give Serial time to initialize
-    
     Serial.println("=== Mechanical Clock with Onboard RTC ===");
-    Serial.println("Starting initialization...");
+    Serial.println("Initializing system...");
     
-    // Initialize hardware components
-    if (!lcdDisplay.begin()) {
-        Serial.println("FATAL: LCD initialization failed!");
-        while (1) { delay(1000); } // Halt if LCD fails
-    }
+    // --- Reset Cause Detection ---
+    // Read the Renesas RA4M1 Reset Status Registers to determine why we reset
+    uint8_t rstsr0 = SYSTEM_RSTSR0;
+    uint8_t rstsr1 = SYSTEM_RSTSR1;
+    uint8_t rstsr2 = SYSTEM_RSTSR2;
     
-    if (!RTC.begin()) {
-        Serial.println("FATAL: RTC initialization failed!");
-        while (1) { delay(1000); } // Halt if RTC fails
-    }
-    Serial.println("Onboard RTC initialized.");
+    // Determine reset cause
+    bool powerRelatedReset = (rstsr0 & (1 << PORF_BIT)) != 0; // Power-on reset flag
+    bool isExternalReset = (rstsr1 & (1 << CWSF_BIT)) != 0;   // External reset flag
+    bool isSoftwareReset = (rstsr2 & (1 << SWRF_BIT)) != 0;   // Software reset flag
+    bool isWatchdogReset = (rstsr2 & (1 << WDTRF_BIT)) != 0;  // Watchdog reset flag
     
-    // Check if RTC has a reasonable time, if not set a default
-    RTCTime currentRTCtime;
-    RTC.getTime(currentRTCtime);
-    time_t currentUnixTime = currentRTCtime.getUnixTime();
+    Serial.print("Reset Status - RSTSR0: 0x"); Serial.print(rstsr0, HEX);
+    Serial.print(", RSTSR1: 0x"); Serial.print(rstsr1, HEX);
+    Serial.print(", RSTSR2: 0x"); Serial.println(rstsr2, HEX);
     
-    Serial.print("RTC current time: "); Serial.println(currentUnixTime);
-    
-    // If RTC time is before 2023, set it to a reasonable default
-    if (currentUnixTime < 1672531200UL) { // Before Jan 1, 2023
-        Serial.println("RTC time is too old, setting to default...");
-        // Set to January 1, 2024 12:00:00 UTC
-        RTCTime defaultTime(1, Month::JANUARY, 2024, 12, 0, 0, DayOfWeek::MONDAY, SaveLight::SAVING_TIME_INACTIVE);
-        RTC.setTime(defaultTime);
-        Serial.println("RTC set to default time: Jan 1, 2024 12:00:00 UTC");
-    }
-    
-    // Configure power-off interrupt
-    pinMode(POWER_PIN, INPUT_PULLUP);
-    attachInterrupt(digitalPinToInterrupt(POWER_PIN), PowerOffISR, FALLING);
-    Serial.println("Power-off interrupt configured.");
-    
-    // Initialize mechanical clock
-    mechanicalClock.begin();
-    Serial.println("MechanicalClock initialized.");
-    
-    // Check for power-off time in EEPROM
-    time_t initialClockTime = 0;
-    EEPROM.get(EEPROM_ADDRESS_INITIAL_TIME, initialClockTime);
-    
-    Serial.print("EEPROM power-off time: "); Serial.println(initialClockTime);
-    
-    // Validate EEPROM time: check for reasonable range (not too old, not in future)
-    time_t currentTime = getCurrentUTC();
-    time_t minValidTime = 1672531200UL; // Jan 1, 2023 00:00:00 UTC
-    time_t maxValidTime = 1735689600UL; // Jan 1, 2025 00:00:00 UTC (reasonable future date)
-    
-    Serial.print("Current UTC time: "); Serial.println(currentTime);
-    Serial.print("Power-off time from EEPROM: "); Serial.println(initialClockTime);
-    
-    if (initialClockTime < minValidTime || initialClockTime > maxValidTime) {
-        // Invalid power-off time - use current time
-        Serial.print("Invalid power-off time: "); Serial.println(initialClockTime);
-        Serial.print("Valid range: "); Serial.print(minValidTime); 
-        Serial.print(" to "); Serial.println(maxValidTime);
-        Serial.println("No valid power-off time - using current time");
-        initialClockTime = 0;
-        
-        // Clear the corrupted EEPROM value
-        time_t clearValue = 0;
-        EEPROM.put(EEPROM_ADDRESS_INITIAL_TIME, clearValue);
+    if (powerRelatedReset) {
+        Serial.println("Reset Cause: Power-related reset (Power-on, Brown-out, etc.).");
+    } else if (isSoftwareReset) {
+        Serial.println("Reset Cause: Software Reset (Reset() function call).");
+    } else if (isWatchdogReset) {
+        Serial.println("Reset Cause: Watchdog Timer Reset.");
+    } else if (isExternalReset) { // External Reset (RESET button, IDE upload, debugger detach)
+        Serial.println("Reset Cause: External Reset (Pin/Upload/Debug).");
     } else {
-        // Valid power-off time found - clear it after reading
-        Serial.println("Valid power-off time found - will calculate movement");
-        time_t clearValue = 0;
-        EEPROM.put(EEPROM_ADDRESS_INITIAL_TIME, clearValue);
+        Serial.println("Reset Cause: Unknown or Initial Cold Boot (No specific flags set).");
     }
     
-    mechanicalClock.adjustToInitialTime(initialClockTime);
-    Serial.println("Clock initialized.");
+    // --- Hardware Initialization ---
+    Serial.println("Initializing core hardware...");
     
-    // Initialize network manager
-    networkManager.begin();
+    // LCD Initialization (includes Wire.begin() internally)
+    if (!lcdDisplay.begin()) {
+        Serial.println("ERROR: LCD display initialization failed. Check wiring/address.");
+        stateManager.setLastError("LCD Fail"); // Set error message
+        stateManager.transitionTo(STATE_ERROR); // Transition to error state
+        // If LCD is critical and error state can't be displayed, consider halting.
+    }
+    // Initial LCD message for setup is handled by StateManager::transitionTo(STATE_INIT)
+    // or by subsequent state transitions.
+
+    // RTC Initialization
+    if (!RTC.begin()) {
+        Serial.println("ERROR: Onboard RTC failed to initialize.");
+        stateManager.setLastError("RTC Fail");
+        stateManager.transitionTo(STATE_ERROR);
+    } else {
+        Serial.println("Onboard RTC initialized.");
+    }
+    
+    // Configure Power Interrupt Pin and Attach ISR
+    pinMode(POWER_PIN, INPUT_PULLUP); // Use INPUT_PULLUP if the detection circuit pulls LOW on power loss
+    attachInterrupt(digitalPinToInterrupt(POWER_PIN), PowerOffISR, FALLING); // Trigger on falling edge
+    Serial.println("Power-off interrupt configured.");
+
+    // --- MechanicalClock Initialization ---
+    mechanicalClock.begin(); // Initializes stepper pins, microstepping, etc.
+    Serial.println("MechanicalClock initialized.");
+
+    // Determine initial clock time source based on reset cause
+    time_t initialClockTime = 0; // Default to epoch 0
+    bool useEEPROMForTime = powerRelatedReset; // Use EEPROM time if power-related reset
+
+    if (useEEPROMForTime) {
+        // Define EEPROM address for initial time if not already defined
+        #ifndef EEPROM_ADDRESS_INITIAL_TIME
+        #define EEPROM_ADDRESS_INITIAL_TIME 0
+        #endif
+        EEPROM.get(EEPROM_ADDRESS_INITIAL_TIME, initialClockTime);
+        Serial.print("Attempting to load time from EEPROM: "); Serial.println(initialClockTime);
+        // Validate EEPROM time: a Unix timestamp for a reasonable year (e.g., 2023-01-01)
+        if (initialClockTime < 1672531200UL) { // 1672531200 is Jan 1, 2023 00:00:00 UTC
+            Serial.println("EEPROM time invalid/unset, falling back to current RTC time.");
+            RTCTime tempNow;
+            RTC.getTime(tempNow);
+            initialClockTime = tempNow.getUnixTime();
+        } else {
+            // Clear the saved time immediately after reading it to avoid re-using old time if power fluctuates
+            time_t clearValue = 0;
+            EEPROM.put(EEPROM_ADDRESS_INITIAL_TIME, clearValue);
+            Serial.println("✓ Cleared saved power-down time from EEPROM.");
+        }
+    } else { // Soft reset, watchdog, external reset, or first cold boot
+        RTCTime tempNow;
+        RTC.getTime(tempNow); // Get current time from RTC
+        initialClockTime = tempNow.getUnixTime();
+        Serial.print("Initial time from RTC: "); Serial.println(initialClockTime);
+    }
+    mechanicalClock.adjustToInitialTime(initialClockTime); // Set clock hands to this initial time
+    Serial.print("Clock hands initialized to Unix time: "); Serial.println(initialClockTime);
+
+    // --- NetworkManager Initialization ---
+    // NetworkManager's begin() will load credentials and timezone from EEPROM
+    networkManager.begin(); 
+    Serial.println("NetworkManager initialized.");
 
     // --- Initial State Transition ---
     // If we are already in an error state from initial hardware checks, stick with it.
