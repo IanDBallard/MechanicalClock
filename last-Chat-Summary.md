@@ -37,6 +37,24 @@ Arduino UNO R4 WiFi-based mechanical clock with onboard RTC, WiFi connectivity, 
 - **Better OOP Design**: Clock manages its own initialization state
 - **Reduced Code Complexity**: Eliminated 76 lines from main.cpp
 
+#### **V2.1.5 - Documentation Updates**
+- **Comprehensive Documentation**: Created detailed technical documentation
+- **Code Quality Review**: Analyzed and documented OOP compliance
+- **Version Tracking**: Enhanced change tracking and history
+
+#### **V2.1.6 - Unified Architecture**
+- **Re-introduced updateCurrentTime()**: Unified design for all time synchronization
+- **OOP Compliance**: Proper inheritance and polymorphism implementation
+- **State Integration**: StateManager uses unified time sync approach
+- **Method Documentation**: Updated interface documentation
+
+#### **V2.1.7 - Consolidated Time Sync**
+- **Unified updateCurrentTime()**: Single method handles all scenarios
+- **Removed adjustToInitialTime()**: Eliminated redundant method
+- **Automatic Detection**: Large movements trigger shortest path calculation
+- **Code Reduction**: 44 lines removed, improved maintainability
+- **Comprehensive Documentation**: Created `DOCUMENTATION.md` technical reference
+
 ### ✅ Current Functionality
 - **WiFi Connection**: Working with proper DHCP IP assignment and graceful disconnection handling
 - **NTP Time Sync**: Functional with automatic time synchronization and retry logic
@@ -46,8 +64,16 @@ Arduino UNO R4 WiFi-based mechanical clock with onboard RTC, WiFi connectivity, 
   - Network status icons: Position 15 on both lines (preserved during clearing)
   - **NEW**: Accurate day of week calculation
 - **RTC**: Onboard real-time clock operational
-- **Mechanical Clock**: Stepper motor control with encapsulated power recovery
+- **Mechanical Clock**: Stepper motor control with unified time sync logic
 - **Power Recovery**: Simplified EEPROM-based recovery without complex reset detection
+- **Unified Architecture**: Single `updateCurrentTime()` method handles all time synchronization scenarios
+
+### 📚 Documentation Structure
+- **`DOCUMENTATION.md`**: Comprehensive technical reference (new)
+- **`last-Chat-Summary.md`**: Development history and current status
+- **`FiniteStateMachine.md`**: State machine design and behavior
+- **`DesignDecisions.md`**: Architecture decisions and rationale
+- **`TEST_ENVIRONMENTS.md`**: Testing infrastructure and procedures
 
 ### 🔧 Technical Architecture
 - **OOP Refactor**: Network logic encapsulated in `NetworkManager` class
