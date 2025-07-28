@@ -152,6 +152,9 @@ void NetworkManager::setupAccessPoint() {
         _server.begin();
         _udpClient.stop(); // Ensure UDP client is stopped if AP is active
         Serial.println("Web server started for captive portal.");
+        Serial.print("Server listening on port: 80");
+        Serial.print(" | AP IP: "); Serial.println(WiFi.localIP());
+        Serial.print("AP Status: "); Serial.println(WiFi.status());
     } else {
         Serial.println("\nAP failed to start listening within timeout!");
         // Force config mode or error state if AP fails
@@ -577,6 +580,8 @@ bool NetworkManager::handleConfigPortal(String& errorMessage) {
     if (client) {
         Serial.println("\n--- New Client Connected to AP ---");
         Serial.print("Client IP: "); Serial.println(client.remoteIP());
+        Serial.println("Client connected successfully!");
+        
         String currentLine = "";
         unsigned long connectionStartTime = millis();
         
@@ -619,6 +624,15 @@ bool NetworkManager::handleConfigPortal(String& errorMessage) {
         }
         Serial.println("Client request timeout or no request received.");
         client.stop(); // Ensure client is stopped
+    } else {
+        // Add periodic debug to show server is still listening
+        static unsigned long lastServerDebug = 0;
+        if (millis() - lastServerDebug > 10000) { // Every 10 seconds
+            lastServerDebug = millis();
+            Serial.print("Server status - AP IP: "); Serial.print(WiFi.localIP());
+            Serial.print(" | AP Status: "); Serial.print(WiFi.status());
+            Serial.println(" | Waiting for client connections...");
+        }
     }
     return false; // Not yet successfully configured
 }
