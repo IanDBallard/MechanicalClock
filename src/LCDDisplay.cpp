@@ -92,10 +92,12 @@ void LCDDisplay::updateTimeAndDate(const RTCTime& currentTime) {
         dateDisplay = dateDisplay.substring(0, DATE_END - DATE_START + 1);
     }
     
-    // Create full area content for both lines (positions 0-14)
-    String fullAreaContent = dateDisplay;
+    // Pad date string to fill positions 0-14 on line 0
+    while (dateDisplay.length() < 15) {
+        dateDisplay += " "; // Pad with spaces
+    }
     
-    // Add time content for line 1
+    // Create time content for line 1
     char timeStr[9]; // Buffer for time string: "HH:MM:SS\0"
     snprintf(timeStr, sizeof(timeStr), "%02d:%02d:%02d", 
             currentHour, currentMinute, currentSecond);
@@ -106,11 +108,9 @@ void LCDDisplay::updateTimeAndDate(const RTCTime& currentTime) {
         timeDisplay += " "; // Pad with spaces
     }
     
-    // Combine date and time for full area update
-    fullAreaContent += timeDisplay;
-    
-    // Update full area (both lines, positions 0-14) - only writes to LCD if changed
-    updateBufferArea(0, 1, 0, 14, fullAreaContent);
+    // Update each line separately (positions 0-14)
+    updateBufferArea(0, 0, 0, 14, dateDisplay);  // Line 0: Date
+    updateBufferArea(1, 1, 0, 14, timeDisplay);  // Line 1: Time
     
     // Update last displayed values
     _lastDisplayedDay = currentDay;
