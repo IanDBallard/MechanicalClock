@@ -82,6 +82,9 @@ void StateManager::_handleStateEntry(ClockState newState) {
         case STATE_INIT:
             _lcdDisplay.printLine(0, "Initializing...");
             _lcdDisplay.printLine(1, "Please Wait");
+            _lcdDisplay.updateNetworkStatus(_networkManager.getWiFiStatus(), 
+                                        _networkManager.getLastNtpSyncTime(),
+                                        _networkManager.getNtpSyncInterval());
             break;
             
         case STATE_CONFIG:
@@ -90,6 +93,9 @@ void StateManager::_handleStateEntry(ClockState newState) {
             _networkManager.startConfigurationMode();
             _lcdDisplay.printLine(0, "Config Mode");
             _lcdDisplay.printLine(1, "Connect to AP");
+            _lcdDisplay.updateNetworkStatus(_networkManager.getWiFiStatus(), 
+                                        _networkManager.getLastNtpSyncTime(),
+                                        _networkManager.getNtpSyncInterval());
             break;
             
         case STATE_CONNECTING_WIFI:
@@ -97,6 +103,9 @@ void StateManager::_handleStateEntry(ClockState newState) {
             _wifiConnectStartTime = millis();
             _lcdDisplay.printLine(0, "Connecting WiFi");
             _lcdDisplay.printLine(1, "Please Wait...");
+            _lcdDisplay.updateNetworkStatus(_networkManager.getWiFiStatus(), 
+                                        _networkManager.getLastNtpSyncTime(),
+                                        _networkManager.getNtpSyncInterval());
             break;
             
         case STATE_SYNCING_TIME:
@@ -104,12 +113,18 @@ void StateManager::_handleStateEntry(ClockState newState) {
             _ntpSyncStartTime = millis();
             _lcdDisplay.printLine(0, "Syncing Time");
             _lcdDisplay.printLine(1, "NTP Server...");
+            _lcdDisplay.updateNetworkStatus(_networkManager.getWiFiStatus(), 
+                                        _networkManager.getLastNtpSyncTime(),
+                                        _networkManager.getNtpSyncInterval());
             break;
             
         case STATE_RUNNING:
             Serial.println("Entering normal operation...");
             _lcdDisplay.printLine(0, "Clock Running");
             _lcdDisplay.printLine(1, "Normal Mode");
+            _lcdDisplay.updateNetworkStatus(_networkManager.getWiFiStatus(), 
+                                        _networkManager.getLastNtpSyncTime(),
+                                        _networkManager.getNtpSyncInterval());
             break;
             
         case STATE_ERROR:
@@ -117,6 +132,9 @@ void StateManager::_handleStateEntry(ClockState newState) {
             Serial.println(_lastError);
             _lcdDisplay.printLine(0, "ERROR:");
             _lcdDisplay.printLine(1, _lastError);
+            _lcdDisplay.updateNetworkStatus(_networkManager.getWiFiStatus(), 
+                                        _networkManager.getLastNtpSyncTime(),
+                                        _networkManager.getNtpSyncInterval());
             break;
     }
 }
