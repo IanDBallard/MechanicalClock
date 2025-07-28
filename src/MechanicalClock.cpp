@@ -65,19 +65,19 @@ void MechanicalClock::begin() {
     Serial.print("Power-down time from EEPROM: "); Serial.println(powerDownTime);
     
     if (powerDownTime != 0) {
-        Serial.println("Power-down time found - will calculate stepper adjustment");
+        Serial.println("Power-down time found - will calculate stepper adjustment after NTP sync");
         // Clear the saved time immediately to avoid re-using it
         time_t clearValue = 0;
         EEPROM.put(EEPROM_ADDRESS_INITIAL_TIME, clearValue);
         Serial.println("✓ Cleared saved power-down time from EEPROM.");
         
-        // Set initial time for power recovery calculation, then sync
+        // Store the power-down time for use after NTP sync
         _currentClockTime = powerDownTime;
-        updateCurrentTime(); // Will detect large movement and use shortest path
     } else {
-        Serial.println("No power-down time found - assuming warm boot, sync to current time");
-        // Sync to current time using unified updateCurrentTime method
-        updateCurrentTime();
+        Serial.println("No power-down time found - will wait for NTP sync before calculating stepper position");
+        // Don't calculate stepper movement yet - wait for NTP sync
+        // Just initialize the current time to 0 to indicate we need sync
+        _currentClockTime = 0;
     }
     
     _activityLED.on();
@@ -106,6 +106,15 @@ void MechanicalClock::updateCurrentTime() {
 
     // Get current UTC time from RTC
     time_t currentUTC = getCurrentUTC();
+    
+    // If _currentClockTime is 0, this is the first sync after startup
+    // Just set the current time without calculating movement
+    if (_currentClockTime == 0) {
+        Serial.println("[DEBUG] First time sync - setting current position without movement");
+        _currentClockTime = currentUTC;
+        return;
+    }
+    
     long timeDiff = currentUTC - _currentClockTime;
     
     // If time difference is large (> 6 hours), use shortest path logic
