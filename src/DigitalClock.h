@@ -18,8 +18,8 @@ public:
 
     void begin() override;
     void update() override;   // Optimized updates - only when values change
-    void handlePowerOff() override;
     void updateCurrentTime() override; // Force update for time sync events
+    // handlePowerOff() inherited from base class - no override needed
 };
 
 #endif // DIGITAL_CLOCK_H 

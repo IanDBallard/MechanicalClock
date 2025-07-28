@@ -135,14 +135,12 @@ void MechanicalClock::update() {
 
 
 void MechanicalClock::handlePowerOff() {
-    RTCTime currentRTCtime;
-    _rtc.getTime(currentRTCtime); 
-
-    time_t timeToSave = currentRTCtime.getUnixTime();
-    EEPROM.put(EEPROM_ADDRESS_INITIAL_TIME, timeToSave);
-
+    // Call base class to save current time to EEPROM
+    Clock::handlePowerOff();
+    
+    // Mechanical-specific power-off handling
     _activityLED.on(); 
-    digitalWrite(_enablePin, HIGH); 
+    digitalWrite(_enablePin, HIGH); // Disable stepper driver
 }
 
 void MechanicalClock::updateCurrentTime() {

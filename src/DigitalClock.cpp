@@ -52,9 +52,7 @@ void DigitalClock::update() {
     // calling lcdDisplay.updateNetworkStatus()
 }
 
-void DigitalClock::handlePowerOff() {
-    Serial.println("DigitalClock::handlePowerOff() called.");
-}
+
 
 void DigitalClock::updateCurrentTime() {
     // Force update for time synchronization events (NTP sync, manual adjustments, etc.)
