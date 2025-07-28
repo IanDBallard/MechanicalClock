@@ -224,12 +224,7 @@ void StateManager::_runRunningState() {
     time_t currentUTC = getCurrentUTC();
     RTCTime localTime = convertUTCToLocal(currentUTC, _networkManager.getTimeZoneOffset(), _networkManager.getUseDST());
     
-    // Debug: Print time conversion info
-    Serial.print("Time conversion: UTC="); Serial.print(currentUTC);
-    Serial.print(", Local day="); Serial.print(localTime.getDayOfMonth());
-    Serial.print(", Local hour="); Serial.print(localTime.getHour());
-    int dowInt = DayOfWeek2int(localTime.getDayOfWeek(), true);
-    Serial.print(", Local DOW="); Serial.println(dowInt);
+
     
     _lcdDisplay.updateTimeAndDate(localTime);
     _lcdDisplay.updateNetworkStatus(_networkManager.getWiFiStatus(), 
