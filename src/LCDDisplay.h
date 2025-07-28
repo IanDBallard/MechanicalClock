@@ -48,11 +48,11 @@ private:
     // Custom characters (as members to be created once)
     byte _wifiSymbol[8] = {
         B00000,
-        B00000,
-        B00001,
-        B00101,
-        B10101,
-        B00000,
+        B00100,
+        B01010,
+        B01010,
+        B10001,
+        B00100,
         B00000,
         B00000
     };
