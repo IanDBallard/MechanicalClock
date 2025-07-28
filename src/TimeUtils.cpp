@@ -7,8 +7,8 @@ const char* const MONTH_NAMES[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Ju
 // Array of abbreviated day of week names for display (0-indexed, starting Sunday)
 const char* const DOW_ABBREV[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
 
-// Note: Month2int and DayOfWeek2int are already provided by the RTC library
-// We don't need to implement them here to avoid duplicate definitions
+// Note: Month2int and DayOfWeek2int are custom utility functions for converting
+// RTC library enums to integers. They are defined here as helpers.
 
 
 // Calculate if Daylight Saving Time (DST) is currently active for US rules

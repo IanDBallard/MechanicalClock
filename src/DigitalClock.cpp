@@ -42,8 +42,13 @@ void DigitalClock::handlePowerOff() {
 }
 
 void DigitalClock::updateCurrentTime() {
-    Serial.print("DigitalClock::updateCurrentTime() called with: ");
-    Serial.println("(no parameters needed - always reads from RTC)");
-    // Digital clock doesn't need to track current time internally
-    // It always reads from RTC, so this is a no-op
-} 
+    // Unified display update logic for all time synchronization events
+    // (NTP sync, RTC updates, manual adjustments, etc.)
+    RTCTime currentTime;
+    _rtc.getTime(currentTime);
+    
+    // Update display with current time
+    _lcd.updateTimeAndDate(currentTime);
+}
+
+ 

@@ -51,6 +51,7 @@ void MechanicalClock::begin() {
     Serial.println("MechanicalClock::begin() called.");
     
     // Hardware initialization
+    _activityLED.begin(); // Initialize LED pin
     pinMode(_enablePin, OUTPUT);
     _disableStepperDriver();
     setMicrosteppingMode(CURRENT_MICROSTEP);
@@ -73,9 +74,9 @@ void MechanicalClock::begin() {
         // Calculate and set initial position based on power-down time
         adjustToInitialTime(powerDownTime);
     } else {
-        Serial.println("No power-down time found - assuming warm boot, no adjustment needed");
-        // Set current position based on current time (no power-down adjustment)
-        adjustToInitialTime(0);
+        Serial.println("No power-down time found - assuming warm boot, sync to current time");
+        // Sync to current time using unified updateCurrentTime method
+        updateCurrentTime();
     }
     
     _activityLED.on();
@@ -198,7 +199,6 @@ void MechanicalClock::adjustToInitialTime(time_t initialUnixTime) {
 }
 
 void MechanicalClock::handlePowerOff() {
-    Serial.println("MechanicalClock::handlePowerOff() ISR called.");
     RTCTime currentRTCtime;
     _rtc.getTime(currentRTCtime); 
 
@@ -209,22 +209,37 @@ void MechanicalClock::handlePowerOff() {
     digitalWrite(_enablePin, HIGH); 
 }
 
+void MechanicalClock::updateCurrentTime() {
+    // Unified stepper movement logic for all time synchronization events
+    // (NTP sync, startup, manual adjustments, etc.)
+    time_t currentUTC = getCurrentUTC();
+    long timeDiff = currentUTC - _currentClockTime;
+    
+    if (abs(timeDiff) >= _secondsPerStep) {
+        long stepsNeeded = timeDiff / _secondsPerStep;
+        
+        // Limit to reasonable movement (sanity check)
+        if (abs(stepsNeeded) > 100) {
+            Serial.print("[WARNING] Excessive steps detected: "); Serial.print(stepsNeeded);
+            Serial.print(" (TimeDiff: "); Serial.print(timeDiff);
+            Serial.println(") - Limiting to reasonable value");
+            stepsNeeded = (stepsNeeded > 0) ? 100 : -100;
+        }
+        
+        if (stepsNeeded != 0) {
+            Serial.print("[DEBUG] updateCurrentTime - StepsNeeded: "); Serial.print(stepsNeeded);
+            Serial.print(", TimeDiff: "); Serial.println(timeDiff);
+            
+            _myStepper.move(_myStepper.distanceToGo() + stepsNeeded); 
+            _currentClockTime += stepsNeeded * _secondsPerStep;
+        }
+    }
+}
+
 void MechanicalClock::setMicrosteppingMode(uint8_t mode) {
     _setMicrostepping(mode);
 }
 
-void MechanicalClock::updateCurrentTime() {
-    Serial.print("updateCurrentTime called - updating _currentClockTime to: ");
-    Serial.println(getCurrentUTC());
-    _currentClockTime = getCurrentUTC();
-}
 
-// _calculateStepsToAlign is kept as a protected helper, but not directly used in new run() logic.
-int MechanicalClock::_calculateStepsToAlign(int prevHour, int prevMinute, int currentHour, int currentMinute) {
-    int elapsedMinutes = (currentHour * 60 + currentMinute) - (prevHour * 60 + prevMinute);
-    if (elapsedMinutes < 0) {
-        elapsedMinutes += 24 * 60;
-    }
-    int minuteSteps = (long)elapsedMinutes * _stepsPerRevolution / 60;
-    return minuteSteps;
-} 
+
+ 

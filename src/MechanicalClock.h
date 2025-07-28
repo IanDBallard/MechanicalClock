@@ -5,9 +5,7 @@
 #include <AccelStepper.h> // For stepper motor control
 #include <EEPROM.h>       // For saving/loading initial time
 #include "LED.h"          // Include LED class
-
-// EEPROM address for storing initial time
-#define EEPROM_ADDRESS_INITIAL_TIME 0
+#include "Constants.h"    // Centralized constants
 
 // Microstepping constants
 #define MICROSTEP_FULL 0b000
@@ -57,12 +55,11 @@ public:
     void update() override;   // Renamed from run()
     void adjustToInitialTime(time_t initialUnixTime) override;
     void handlePowerOff() override; // Note: This will be called from ISR.
+    void updateCurrentTime() override; // Sync to current time (unified stepper movement logic)
 
     void setMicrosteppingMode(uint8_t mode);
-    void updateCurrentTime() override; // Update current time after NTP sync
 
-protected:
-    int _calculateStepsToAlign(int prevHour, int prevMinute, int currentHour, int currentMinute); // This will become obsolete with _currentClockTime
+
 };
 
 #endif // MECHANICAL_CLOCK_H 

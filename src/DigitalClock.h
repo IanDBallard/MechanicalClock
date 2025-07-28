@@ -21,9 +21,9 @@ public:
     void begin() override;
     void update() override;   // Renamed from run()
 
-    void adjustToInitialTime(time_t initialUnixTime) override;
-    void handlePowerOff() override; 
-    void updateCurrentTime() override; // Update current time after NTP sync
+        void adjustToInitialTime(time_t initialUnixTime) override;
+    void handlePowerOff() override;
+    void updateCurrentTime() override; // Sync to current time (unified display update logic)
 };
 
 #endif // DIGITAL_CLOCK_H 

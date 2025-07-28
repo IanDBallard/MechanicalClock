@@ -9,8 +9,8 @@ extern const char* const MONTH_NAMES[];
 // Array of abbreviated day of week names for display
 extern const char* const DOW_ABBREV[];
 
-// Note: Month2int and DayOfWeek2int are already provided by the RTC library
-// No need to declare them here
+// Note: Month2int and DayOfWeek2int are custom utility functions for converting
+// RTC library enums to integers. They are defined in TimeUtils.cpp.
 
 // Calculate if Daylight Saving Time (DST) is currently active for US rules
 // This function takes an RTCTime object (assumed to be in UTC)

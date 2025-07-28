@@ -33,47 +33,35 @@ void loop() {
 #include "LCDDisplay.h"      // LCD display management
 #include "NetworkManager.h"  // Network and NTP management
 #include "StateManager.h"    // Overall system state management
+#include "Constants.h"       // Centralized constants
 
 // --- Global Constants and Pin Definitions ---
-// EEPROM_TOTAL_SIZE is not directly used in put/get but good for reference if doing manual byte-level writes.
-// EEPROM_ADDR_INITIAL_TIME, EEPROM_ADDR_WIFI_CRED_START, etc. are defined in respective class headers.
-
-// Pin definitions
-const int DIR_PIN = 7;
-const int STEP_PIN = 8;
-const int MS1_PIN = 4;
-const int MS2_PIN = 5;
-const int MS3_PIN = 6;
-const int ENABLE_PIN = 3; // For A4988 driver enable (LOW = enabled)
-const int LED_PIN = 13;   // Onboard LED
-const int POWER_PIN = 2;  // Interrupt pin for power outage detection
+// Pin definitions (all in Constants.h)
+// const int DIR_PIN = 7;
+// const int STEP_PIN = 8;
+// const int MS1_PIN = 4;
+// const int MS2_PIN = 5;
+// const int MS3_PIN = 6;
+// const int ENABLE_PIN = 3; // For A4988 driver enable (LOW = enabled)
+// const int LED_PIN = 13;   // Onboard LED
+// const int POWER_PIN = 2;  // Interrupt pin for power outage detection
 
 // Microstepping mode for MechanicalClock (defined here to pass to constructor)
-// Define microstepping constants if not already defined in MechanicalClock.h
 #ifndef MICROSTEP_FULL
 #define MICROSTEP_FULL 0b000
 #endif
 const uint8_t MECHANICAL_CLOCK_MICROSTEP_MODE = MICROSTEP_FULL; // Use full steps
 
-// NetworkManager Configuration
-const char* AP_SSID = "ClockSetup"; // SSID for the captive portal AP
-IPAddress NTP_SERVER_IP(129, 6, 15, 28); // time.nist.gov
-const unsigned int LOCAL_UDP_PORT = 2390;
-const unsigned long WIFI_CONNECT_TIMEOUT = 30000; // 30 seconds
-const int MAX_NTP_RETRIES = 3;
-const unsigned long NTP_RETRY_DELAY = 5000; // 5 seconds
-const unsigned long NTP_SYNC_INTERVAL = 3600000UL; // 1 hour (in milliseconds)
-const int TIME_ZONE_OFFSET_HOURS = -4; // EDT (Eastern Daylight Time) offset from UTC
-const bool USE_DST_AUTO_CALC = true;    // Enable automatic DST calculation
-
-// --- Global Renesas Reset Status Register Access ---
-// Note: These are specific to Renesas RA4M1. Assumes hal_data.h or similar setup.
-// You might need to add extern "C" { #include <hal_data.h> } if compiler complains.
-// If you don't have hal_data.h, you might need to manually define these addresses
-// based on Renesas RA4M1 datasheet or Arduino R4 core files.
-
-
-
+// NetworkManager Configuration (all in Constants.h)
+// const char* AP_SSID = "ClockSetup"; // SSID for the captive portal AP
+// IPAddress NTP_SERVER_IP(129, 6, 15, 28); // time.nist.gov
+// const unsigned int LOCAL_UDP_PORT = 2390;
+// const unsigned long WIFI_CONNECT_TIMEOUT = 30000; // 30 seconds
+// const int MAX_NTP_RETRIES = 3;
+// const unsigned long NTP_RETRY_DELAY = 5000; // 5 seconds
+// const unsigned long NTP_SYNC_INTERVAL = 3600000UL; // 1 hour (in milliseconds)
+// const int TIME_ZONE_OFFSET_HOURS = -4; // EDT (Eastern Daylight Time) offset from UTC
+// const bool USE_DST_AUTO_CALC = true;    // Enable automatic DST calculation
 
 // --- Global Instances of Our Classes ---
 // Note: These are declared as global variables so they can be accessed by the ISR
@@ -83,9 +71,8 @@ const bool USE_DST_AUTO_CALC = true;    // Enable automatic DST calculation
 LCDDisplay lcdDisplay(0x27);
 
 // Network Manager (manages WiFi, NTP, and EEPROM storage for credentials)
-NetworkManager networkManager(AP_SSID, NTP_SERVER_IP, LOCAL_UDP_PORT, WIFI_CONNECT_TIMEOUT, 
-                             MAX_NTP_RETRIES, NTP_RETRY_DELAY, MAX_NTP_RETRIES, WIFI_CONNECT_TIMEOUT, 
-                             NTP_SYNC_INTERVAL, TIME_ZONE_OFFSET_HOURS, USE_DST_AUTO_CALC);
+// Parameters: (apSsid, ntpServerIP, localPort, wifiConnectTimeout, maxNtpRetries, ntpRetryDelay, wifiReconnectRetries, wifiReconnectDelay, ntpSyncInterval, timeZoneOffsetHours, useDST)
+NetworkManager networkManager(AP_SSID, IPAddress(129, 6, 15, 28), 2390, WIFI_CONNECT_TIMEOUT, 3, 5000, 3, 10000, NTP_SYNC_INTERVAL, -4, true);
 
 // Mechanical Clock (drives the stepper motor and manages hand positions)
 MechanicalClock mechanicalClock(
@@ -98,28 +85,12 @@ StateManager stateManager(networkManager, lcdDisplay, mechanicalClock, RTC);
 
 // --- Interrupt Service Routine for Power-Off Detection ---
 void PowerOffISR() {
-    // This ISR is called when the power-off detection circuit pulls the POWER_PIN LOW
-    // We need to save the current time to EEPROM before power is lost
-    
-    // Disable interrupts to prevent re-entry
+    // ISR: Save current time to EEPROM before power is lost (ISR-safe only)
     noInterrupts();
-    
-    // Get current time and save to EEPROM
     RTCTime currentTime;
     RTC.getTime(currentTime);
     time_t unixTime = currentTime.getUnixTime();
-    
-    // Define EEPROM address for initial time if not already defined
-    #ifndef EEPROM_ADDRESS_INITIAL_TIME
-    #define EEPROM_ADDRESS_INITIAL_TIME 0
-    #endif
-    
     EEPROM.put(EEPROM_ADDRESS_INITIAL_TIME, unixTime);
-    
-    // Note: We don't call __WFI() here as it can cause issues on some boards
-    // The power-off detection circuit should handle the actual power-down
-    
-    // Re-enable interrupts
     interrupts();
 }
 

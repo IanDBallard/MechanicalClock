@@ -207,9 +207,8 @@ void StateManager::_runConnectingWiFiState() {
 void StateManager::_runSyncingTimeState() {
     // Attempt NTP sync using the RTC reference
     if (_networkManager.syncTimeWithRTC(_rtc)) {
-        // After successful NTP sync, update the clock's current time
+        // After successful NTP sync, update clock to current time
         _clock.updateCurrentTime();
-        
         transitionTo(STATE_RUNNING);
     }
     

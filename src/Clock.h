@@ -13,11 +13,10 @@ public:
     Clock(RTClock& rtcRef, LCDDisplay& lcdRef) : _rtc(rtcRef), _lcd(lcdRef) {}
 
     virtual void begin() = 0; // For any initial setup specific to the clock type
-    virtual void update() = 0;   // Renamed: The main operational loop logic for the clock type
-
-    virtual void adjustToInitialTime(time_t initialUnixTime) = 0; 
-    virtual void handlePowerOff() = 0;
-    virtual void updateCurrentTime() = 0; // Update current time after NTP sync
+    virtual void update() = 0;   // The main operational loop logic for the clock type
+    virtual void updateCurrentTime() = 0; // Sync to current time (NTP sync, startup, manual adjustments)
+    virtual void adjustToInitialTime(time_t initialUnixTime) = 0; // Power recovery specific
+    virtual void handlePowerOff() = 0; // Power-off handling (ISR safe)
 };
 
 #endif // CLOCK_H 

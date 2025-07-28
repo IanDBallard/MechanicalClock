@@ -27,18 +27,6 @@ public:
     // Status methods
     bool isOn() const;
     bool getState() const;
-    
-    // Blinking functionality
-    void blink(unsigned long onTime, unsigned long offTime);
-    void updateBlink(); // Call in loop for blinking
-    
-private:
-    // Blinking state
-    bool blinking;
-    unsigned long blinkOnTime;
-    unsigned long blinkOffTime;
-    unsigned long lastBlinkChange;
-    bool blinkState;
 };
 
 #endif // LED_H 
