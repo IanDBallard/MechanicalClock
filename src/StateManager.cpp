@@ -228,7 +228,8 @@ void StateManager::_runRunningState() {
     Serial.print("Time conversion: UTC="); Serial.print(currentUTC);
     Serial.print(", Local day="); Serial.print(localTime.getDayOfMonth());
     Serial.print(", Local hour="); Serial.print(localTime.getHour());
-    Serial.print(", Local DOW="); Serial.println(localTime.getDayOfWeek());
+    int dowInt = DayOfWeek2int(localTime.getDayOfWeek(), true);
+    Serial.print(", Local DOW="); Serial.println(dowInt);
     
     _lcdDisplay.updateTimeAndDate(localTime);
     _lcdDisplay.updateNetworkStatus(_networkManager.getWiFiStatus(), 

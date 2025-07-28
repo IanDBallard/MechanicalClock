@@ -74,13 +74,17 @@ void LCDDisplay::updateTimeAndDate(const RTCTime& currentTime) {
     _lcd.setCursor(DATE_START, 0); // Set cursor to date start position
     char dateStr[15]; // Buffer for date string: "DD/MMM/YY WWW" (14 chars max)
     
-    // Calculate day of week directly from Unix timestamp to avoid conversion issues
-    time_t unixTime = currentTime.getUnixTime();
-    int dayOfWeekInt = ((unixTime / 86400) + 4) % 7; // Unix epoch (1970-01-01) was a Thursday (4)
+    // Calculate day of week directly from UTC Unix timestamp to avoid conversion issues
+    // We need to use UTC time for day calculation, not local time
+    time_t utcUnixTime = getCurrentUTC(); // Get UTC time directly
+    int dayOfWeekInt = ((utcUnixTime / 86400) + 4) % 7; // Unix epoch (1970-01-01) was a Thursday (4)
     
     // Debug: Print day of week calculation
     Serial.print("Day of week calculation: ");
-    Serial.print("Unix time="); Serial.print(unixTime);
+    Serial.print("UTC Unix="); Serial.print(utcUnixTime);
+    // Create a non-const copy to call getUnixTime() for local time
+    RTCTime tempTime = currentTime;
+    Serial.print(", Local Unix="); Serial.print(tempTime.getUnixTime());
     Serial.print(", Calculated DOW="); Serial.print(dayOfWeekInt);
     Serial.print(", RTC DOW="); Serial.print(DayOfWeek2int(currentTime.getDayOfWeek(), true));
     Serial.print(", Display="); Serial.println(DOW_ABBREV[dayOfWeekInt]);
