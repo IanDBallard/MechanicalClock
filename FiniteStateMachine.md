@@ -81,14 +81,18 @@ void StateManager::_runConfigState() {
 
 **Next States**:
 - `STATE_SYNCING_TIME` (3) - WiFi connected successfully
+- `STATE_RUNNING` (4) - Connection timeout, graceful fallback to running state
 - `STATE_CONFIG` (1) - Connection failed, return to config mode
-- `STATE_ERROR` (5) - Critical connection failure
 
 **Implementation**:
 ```cpp
 void StateManager::_runConnectingWiFiState() {
     if (_networkManager.ensureConnection()) {
         transitionTo(STATE_SYNCING_TIME);
+    } else if (millis() - _wifiConnectStartTime > 30000UL) {
+        // Graceful timeout handling - defer NTP sync and return to running
+        _networkManager.resetNtpSyncCounter();
+        transitionTo(STATE_RUNNING);
     } else {
         setLastError("WiFi Timeout");
         transitionTo(STATE_ERROR);
@@ -115,13 +119,18 @@ void StateManager::_runConnectingWiFiState() {
 
 **Next States**:
 - `STATE_RUNNING` (4) - Time synchronized successfully
-- `STATE_ERROR` (5) - NTP synchronization failed
+- `STATE_RUNNING` (4) - NTP sync timeout, graceful fallback to running state
+- `STATE_ERROR` (5) - Critical NTP synchronization failure
 
 **Implementation**:
 ```cpp
 void StateManager::_runSyncingTimeState() {
     if (_networkManager.syncTimeWithRTC(_rtc)) {
         _clock.updateCurrentTime();
+        transitionTo(STATE_RUNNING);
+    } else if (millis() - _ntpSyncStartTime > 30000UL) {
+        // Graceful timeout handling - defer NTP sync and return to running
+        _networkManager.resetNtpSyncCounter();
         transitionTo(STATE_RUNNING);
     } else {
         setLastError("NTP Sync Failed");
@@ -156,15 +165,17 @@ void StateManager::_runSyncingTimeState() {
 **Implementation**:
 ```cpp
 void StateManager::_runRunningState() {
-    // Check for network issues
-    if (!_networkManager.isWiFiConnected()) {
-        setLastError("WiFi Lost");
-        transitionTo(STATE_ERROR);
+    // Check if NTP sync is needed
+    if (_networkManager.isNTPSyncNeeded()) {
+        if (_networkManager.isWiFiConnected()) {
+            // WiFi connected - proceed to NTP sync
+            transitionTo(STATE_SYNCING_TIME);
+        } else {
+            // WiFi disconnected - attempt reconnection first
+            transitionTo(STATE_CONNECTING_WIFI);
+        }
         return;
     }
-    
-    // Periodic NTP sync
-    _networkManager.periodicNtpSync(_rtc);
     
     // Update clock and display
     _clock.update();
@@ -397,14 +408,63 @@ void StateManager::recoverState() {
 }
 ```
 
+## Network Resilience (V2.1.2+)
+
+### Graceful Timeout Handling
+
+The state machine now implements graceful timeout handling to prevent infinite reconnection loops:
+
+#### **WiFi Connection Timeout**
+- **Timeout Duration**: 30 seconds
+- **Behavior**: Instead of transitioning to `STATE_ERROR`, the system:
+  1. Calls `_networkManager.resetNtpSyncCounter()` to defer the next NTP sync attempt
+  2. Transitions to `STATE_RUNNING` to continue normal operation
+  3. Allows the system to function with local RTC time until network is available
+
+#### **NTP Sync Timeout**
+- **Timeout Duration**: 30 seconds
+- **Behavior**: Similar to WiFi timeout:
+  1. Calls `_networkManager.resetNtpSyncCounter()` to defer the next sync attempt
+  2. Transitions to `STATE_RUNNING` to continue normal operation
+  3. Maintains clock functionality with existing RTC time
+
+### Smart NTP Sync Management
+
+#### **Sync Trigger Logic**
+```cpp
+// In STATE_RUNNING
+if (_networkManager.isNTPSyncNeeded()) {
+    if (_networkManager.isWiFiConnected()) {
+        // WiFi connected - proceed to NTP sync
+        transitionTo(STATE_SYNCING_TIME);
+    } else {
+        // WiFi disconnected - attempt reconnection first
+        transitionTo(STATE_CONNECTING_WIFI);
+    }
+}
+```
+
+#### **Sync Counter Management**
+- **Deferred Sync**: When network is unavailable, sync attempts are deferred
+- **Automatic Recovery**: When network becomes available, sync resumes automatically
+- **No Infinite Loops**: System always returns to `STATE_RUNNING` after timeouts
+
+### Benefits of Network Resilience
+
+1. **Continuous Operation**: Clock continues to function even during network outages
+2. **Automatic Recovery**: System automatically resumes network operations when available
+3. **No Manual Intervention**: No need to reset the device after network failures
+4. **Graceful Degradation**: System degrades gracefully from network time to local RTC time
+5. **Resource Efficiency**: Prevents wasteful infinite reconnection attempts
+
 ## Performance Considerations
 
 ### State Execution Timing
 
 - **STATE_INIT**: < 100ms (hardware initialization)
 - **STATE_CONFIG**: Continuous (until user configuration)
-- **STATE_CONNECTING_WIFI**: 30 seconds timeout
-- **STATE_SYNCING_TIME**: 10 seconds timeout
+- **STATE_CONNECTING_WIFI**: 30 seconds timeout (graceful fallback to RUNNING)
+- **STATE_SYNCING_TIME**: 30 seconds timeout (graceful fallback to RUNNING)
 - **STATE_RUNNING**: Continuous (main loop)
 - **STATE_ERROR**: 5 seconds auto-recovery delay
 
