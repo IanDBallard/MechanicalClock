@@ -56,7 +56,8 @@ bool LCDDisplay::begin() {
     }
 }
 
-// updateTimeAndDate(): Updates only the time and date portion of the display
+// updateTimeAndDate(): Updates both time and date portions of the display
+// Always updates both lines to ensure status messages get replaced
 // Respects real estate boundaries and doesn't overwrite status icons
 void LCDDisplay::updateTimeAndDate(const RTCTime& currentTime) {
     if (!_initialized || _errorDisplayed) return; // Do nothing if LCD is not initialized or error is displayed
@@ -69,29 +70,39 @@ void LCDDisplay::updateTimeAndDate(const RTCTime& currentTime) {
     int currentMonth = Month2int(currentTime.getMonth()); // Convert Month enum to 1-12 int
     int currentYear = currentTime.getYear();
 
-    // Update date only if day, month, or year has changed to minimize writes
-    if (_lastDisplayedDay != currentDay || _lastDisplayedMonth != currentMonth || _lastDisplayedYear != currentYear) {
-        _lcd.setCursor(DATE_START, 0); // Set cursor to date start position
-        char dateStr[15]; // Buffer for date string: "DD/MMM/YY WWW" (14 chars max)
-        // snprintf for safe string formatting
-        snprintf(dateStr, sizeof(dateStr), "%02d/%s/%02d %s", 
-                currentDay,
-                MONTH_NAMES[currentMonth - 1], // MONTH_NAMES is 0-indexed (Jan=0)
-                currentYear % 100, // Get last two digits of the year
-                DOW_ABBREV[DayOfWeek2int(currentTime.getDayOfWeek(), true) % 7]); // Get abbreviated day of week
-        
-        // Ensure we don't exceed DATE_END boundary
-        String dateDisplay = String(dateStr);
-        if (dateDisplay.length() > (DATE_END - DATE_START + 1)) {
-            dateDisplay = dateDisplay.substring(0, DATE_END - DATE_START + 1);
-        }
-        _lcd.print(dateDisplay);
-        
-        // Update last displayed values
-        _lastDisplayedDay = currentDay;
-        _lastDisplayedMonth = currentMonth;
-        _lastDisplayedYear = currentYear;
+    // Always update date display to ensure "Clock Running" gets replaced
+    _lcd.setCursor(DATE_START, 0); // Set cursor to date start position
+    char dateStr[15]; // Buffer for date string: "DD/MMM/YY WWW" (14 chars max)
+    
+    // Calculate day of week directly from Unix timestamp to avoid conversion issues
+    time_t unixTime = currentTime.getUnixTime();
+    int dayOfWeekInt = ((unixTime / 86400) + 4) % 7; // Unix epoch (1970-01-01) was a Thursday (4)
+    
+    // Debug: Print day of week calculation
+    Serial.print("Day of week calculation: ");
+    Serial.print("Unix time="); Serial.print(unixTime);
+    Serial.print(", Calculated DOW="); Serial.print(dayOfWeekInt);
+    Serial.print(", RTC DOW="); Serial.print(DayOfWeek2int(currentTime.getDayOfWeek(), true));
+    Serial.print(", Display="); Serial.println(DOW_ABBREV[dayOfWeekInt]);
+    
+    // snprintf for safe string formatting
+    snprintf(dateStr, sizeof(dateStr), "%02d/%s/%02d %s", 
+            currentDay,
+            MONTH_NAMES[currentMonth - 1], // MONTH_NAMES is 0-indexed (Jan=0)
+            currentYear % 100, // Get last two digits of the year
+            DOW_ABBREV[dayOfWeekInt]); // Get abbreviated day of week
+    
+    // Ensure we don't exceed DATE_END boundary
+    String dateDisplay = String(dateStr);
+    if (dateDisplay.length() > (DATE_END - DATE_START + 1)) {
+        dateDisplay = dateDisplay.substring(0, DATE_END - DATE_START + 1);
     }
+    _lcd.print(dateDisplay);
+    
+    // Update last displayed values
+    _lastDisplayedDay = currentDay;
+    _lastDisplayedMonth = currentMonth;
+    _lastDisplayedYear = currentYear;
     
     // Update time display only if hour, minute, or second has changed
     if (_lastDisplayedHour != currentHour || _lastDisplayedMinute != currentMinute || _lastDisplayedSecond != currentSecond) {
