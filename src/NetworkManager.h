@@ -113,7 +113,6 @@ public:
     void stopConfigurationMode();
     bool isConfigurationComplete() const;
     bool connectToWiFi();
-    bool syncTimeWithNTP();
     bool isWiFiConnected() const;
     bool isNTPSyncNeeded() const;
     void resetNtpSyncCounter(); // Reset NTP sync counter to defer sync for another interval

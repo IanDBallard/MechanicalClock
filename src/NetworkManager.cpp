@@ -641,12 +641,7 @@ bool NetworkManager::connectToWiFi() {
     return ensureConnection();
 }
 
-bool NetworkManager::syncTimeWithNTP() {
-    // This method needs an RTC reference, but StateManager doesn't have access to it
-    // We'll need to modify the StateManager to pass the RTC reference
-    // For now, return false to indicate sync is needed but not performed
-    return false; // Placeholder - needs RTC reference
-}
+
 
 bool NetworkManager::isWiFiConnected() const {
     return WiFi.status() == WL_CONNECTED;
