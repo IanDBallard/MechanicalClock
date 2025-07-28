@@ -215,8 +215,9 @@ void StateManager::_runSyncingTimeState() {
     
     // Timeout after 30 seconds
     if (millis() - _ntpSyncStartTime > 30000UL) {
-        setLastError("NTP Timeout");
-        transitionTo(STATE_ERROR);
+        // Reset NTP sync counter and return to running state
+        _networkManager.resetNtpSyncCounter();
+        transitionTo(STATE_RUNNING);
     }
 }
 
