@@ -71,8 +71,9 @@ void MechanicalClock::begin() {
         EEPROM.put(EEPROM_ADDRESS_INITIAL_TIME, clearValue);
         Serial.println("✓ Cleared saved power-down time from EEPROM.");
         
-        // Calculate and set initial position based on power-down time
-        adjustToInitialTime(powerDownTime);
+        // Set initial time for power recovery calculation, then sync
+        _currentClockTime = powerDownTime;
+        updateCurrentTime(); // Will detect large movement and use shortest path
     } else {
         Serial.println("No power-down time found - assuming warm boot, sync to current time");
         // Sync to current time using unified updateCurrentTime method
@@ -131,72 +132,7 @@ void MechanicalClock::update() {
     }
 }
 
-void MechanicalClock::adjustToInitialTime(time_t initialUnixTime) {
-    Serial.print("adjustToInitialTime called with: "); Serial.println(initialUnixTime);
-    
-    // Get current UTC time
-    time_t currentUTC = getCurrentUTC();
-    Serial.print("Current UTC time: "); Serial.println(currentUTC);
-    
-    // Set clock time to current time (not the initial time)
-    _currentClockTime = currentUTC;
-    
-    if (initialUnixTime == 0) {
-        // No power-down time - set position to current time, no movement needed
-        Serial.println("No power-down time - setting position to current time");
-        long secondsIn12HourCycle = currentUTC % SECONDS_IN_12_HOURS;
-        long targetPositionSteps = secondsIn12HourCycle / _secondsPerStep;
-        
-        Serial.print("Target position steps: "); Serial.println(targetPositionSteps);
-        _myStepper.setCurrentPosition(targetPositionSteps);
-    } else {
-        // Power-down time exists - calculate movement needed
-        Serial.println("Power-down time exists - calculating movement");
-        
-        // Calculate time difference
-        long timeDiff = currentUTC - initialUnixTime;
-        Serial.print("Time difference: "); Serial.println(timeDiff);
-        
-        // Get positions within 12-hour cycle
-        long powerDownPosition = initialUnixTime % SECONDS_IN_12_HOURS;
-        long currentPosition = currentUTC % SECONDS_IN_12_HOURS;
-        
-        Serial.print("Power-down position in cycle: "); Serial.println(powerDownPosition);
-        Serial.print("Current position in cycle: "); Serial.println(currentPosition);
-        
-        // Calculate shortest path distance
-        long distance = currentPosition - powerDownPosition;
-        
-        // Handle 12-hour cycle wrap-around for shortest path
-        if (distance > SECONDS_IN_12_HOURS / 2) {
-            distance -= SECONDS_IN_12_HOURS;
-        } else if (distance <= -SECONDS_IN_12_HOURS / 2) {
-            distance += SECONDS_IN_12_HOURS;
-        }
-        
-        Serial.print("Shortest path distance: "); Serial.println(distance);
-        
-        // Convert to steps
-        long stepsNeeded = distance / _secondsPerStep;
-        Serial.print("Steps needed: "); Serial.println(stepsNeeded);
-        
-        // Set current position to power-down position, then move to current position
-        long powerDownSteps = powerDownPosition / _secondsPerStep;
-        _myStepper.setCurrentPosition(powerDownSteps);
-        
-        Serial.print("Set stepper position to: "); Serial.println(powerDownSteps);
-        
-        if (stepsNeeded != 0) {
-            long targetPosition = powerDownSteps + stepsNeeded;
-            Serial.print("Moving to target position: "); Serial.println(targetPosition);
-            _myStepper.moveTo(targetPosition);
-        }
-    }
 
-    _enableStepperDriver(); 
-    _lastStepperMoveTime = millis();
-    Serial.println("adjustToInitialTime complete");
-}
 
 void MechanicalClock::handlePowerOff() {
     RTCTime currentRTCtime;
@@ -211,27 +147,59 @@ void MechanicalClock::handlePowerOff() {
 
 void MechanicalClock::updateCurrentTime() {
     // Unified stepper movement logic for all time synchronization events
-    // (NTP sync, startup, manual adjustments, etc.)
+    // Automatically detects large movements and uses shortest path calculation
     time_t currentUTC = getCurrentUTC();
     long timeDiff = currentUTC - _currentClockTime;
     
-    if (abs(timeDiff) >= _secondsPerStep) {
-        long stepsNeeded = timeDiff / _secondsPerStep;
+    // If time difference is large (> 6 hours), use shortest path logic
+    if (abs(timeDiff) > SECONDS_IN_12_HOURS / 2) {
+        Serial.println("[DEBUG] Large time difference detected - using shortest path calculation");
         
-        // Limit to reasonable movement (sanity check)
-        if (abs(stepsNeeded) > 100) {
-            Serial.print("[WARNING] Excessive steps detected: "); Serial.print(stepsNeeded);
-            Serial.print(" (TimeDiff: "); Serial.print(timeDiff);
-            Serial.println(") - Limiting to reasonable value");
-            stepsNeeded = (stepsNeeded > 0) ? 100 : -100;
+        // Large movement - use shortest path calculation
+        long currentPosition = _currentClockTime % SECONDS_IN_12_HOURS;
+        long targetPosition = currentUTC % SECONDS_IN_12_HOURS;
+        long distance = targetPosition - currentPosition;
+        
+        Serial.print("[DEBUG] Current position in cycle: "); Serial.println(currentPosition);
+        Serial.print("[DEBUG] Target position in cycle: "); Serial.println(targetPosition);
+        Serial.print("[DEBUG] Raw distance: "); Serial.println(distance);
+        
+        // Handle 12-hour cycle wrap-around for shortest path
+        if (distance > SECONDS_IN_12_HOURS / 2) {
+            distance -= SECONDS_IN_12_HOURS;
+        } else if (distance <= -SECONDS_IN_12_HOURS / 2) {
+            distance += SECONDS_IN_12_HOURS;
         }
         
+        Serial.print("[DEBUG] Shortest path distance: "); Serial.println(distance);
+        
+        long stepsNeeded = distance / _secondsPerStep;
+        Serial.print("[DEBUG] Steps needed (shortest path): "); Serial.println(stepsNeeded);
+        
         if (stepsNeeded != 0) {
-            Serial.print("[DEBUG] updateCurrentTime - StepsNeeded: "); Serial.print(stepsNeeded);
-            Serial.print(", TimeDiff: "); Serial.println(timeDiff);
+            _myStepper.move(_myStepper.distanceToGo() + stepsNeeded);
+            _currentClockTime = currentUTC; // Set to exact target time
+        }
+    } else {
+        // Normal movement - use standard logic
+        if (abs(timeDiff) >= _secondsPerStep) {
+            long stepsNeeded = timeDiff / _secondsPerStep;
             
-            _myStepper.move(_myStepper.distanceToGo() + stepsNeeded); 
-            _currentClockTime += stepsNeeded * _secondsPerStep;
+            // Limit to reasonable movement (sanity check)
+            if (abs(stepsNeeded) > 100) {
+                Serial.print("[WARNING] Excessive steps detected: "); Serial.print(stepsNeeded);
+                Serial.print(" (TimeDiff: "); Serial.print(timeDiff);
+                Serial.println(") - Limiting to reasonable value");
+                stepsNeeded = (stepsNeeded > 0) ? 100 : -100;
+            }
+            
+            if (stepsNeeded != 0) {
+                Serial.print("[DEBUG] updateCurrentTime - StepsNeeded: "); Serial.print(stepsNeeded);
+                Serial.print(", TimeDiff: "); Serial.println(timeDiff);
+                
+                _myStepper.move(_myStepper.distanceToGo() + stepsNeeded); 
+                _currentClockTime += stepsNeeded * _secondsPerStep;
+            }
         }
     }
 }

@@ -53,7 +53,6 @@ public:
 
     void begin() override;
     void update() override;   // Renamed from run()
-    void adjustToInitialTime(time_t initialUnixTime) override;
     void handlePowerOff() override; // Note: This will be called from ISR.
     void updateCurrentTime() override; // Sync to current time (unified stepper movement logic)
 

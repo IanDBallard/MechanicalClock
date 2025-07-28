@@ -26,16 +26,7 @@ void DigitalClock::update() { // Renamed from run()
     // calling lcdDisplay.updateNetworkStatus()
 }
 
-void DigitalClock::adjustToInitialTime(time_t initialUnixTime) {
-    _lastDisplayedSecond = -1; 
-    _lastDisplayedMinute = -1;
-    _lastDisplayedHour = -1;
-    _lastDisplayedDay = -1;
-    _lastDisplayedMonth = -1;
-    _lastDisplayedYear = -1;
-    Serial.print("DigitalClock adjusted to initial time: ");
-    Serial.println(initialUnixTime);
-}
+
 
 void DigitalClock::handlePowerOff() {
     Serial.println("DigitalClock::handlePowerOff() called.");

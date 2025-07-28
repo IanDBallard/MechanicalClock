@@ -14,8 +14,7 @@ public:
 
     virtual void begin() = 0; // For any initial setup specific to the clock type
     virtual void update() = 0;   // The main operational loop logic for the clock type
-    virtual void updateCurrentTime() = 0; // Sync to current time (NTP sync, startup, manual adjustments)
-    virtual void adjustToInitialTime(time_t initialUnixTime) = 0; // Power recovery specific
+    virtual void updateCurrentTime() = 0; // Sync to current time (unified for all scenarios)
     virtual void handlePowerOff() = 0; // Power-off handling (ISR safe)
 };
 
