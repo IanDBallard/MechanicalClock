@@ -76,8 +76,10 @@ void LCDDisplay::updateTimeAndDate(const RTCTime& currentTime) {
     // Update date display using smart buffer
     char dateStr[15]; // Buffer for date string: "DD/MMM/YY WWW" (14 chars max)
     
-    // Use RTC library's day calculation since it appears to be correct
-    int dayOfWeekInt = DayOfWeek2int(currentTime.getDayOfWeek(), true);
+    // Calculate day of week directly from UTC Unix timestamp to avoid conversion issues
+    // We need to use UTC time for day calculation, not local time
+    time_t utcUnixTime = getCurrentUTC(); // Get UTC time directly
+    int dayOfWeekInt = ((utcUnixTime / 86400) + 4) % 7; // Unix epoch (1970-01-01) was a Thursday (4)
     
     // snprintf for safe string formatting
     snprintf(dateStr, sizeof(dateStr), "%02d/%s/%02d %s", 
