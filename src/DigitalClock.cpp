@@ -37,15 +37,7 @@ void DigitalClock::update() {
 
     // Only update display if time has changed
     if (timeChanged) {
-        _lcd.updateTimeAndDate(currentTime);
-        
-        // Update our tracking variables
-        _lastDisplayedSecond = currentSecond;
-        _lastDisplayedMinute = currentMinute;
-        _lastDisplayedHour = currentHour;
-        _lastDisplayedDay = currentDay;
-        _lastDisplayedMonth = currentMonth;
-        _lastDisplayedYear = currentYear;
+        forceDisplayUpdate(currentTime);
     }
     
     // Note: Network status update is now handled by StateManager::runCurrentStateLogic
@@ -60,10 +52,19 @@ void DigitalClock::updateCurrentTime() {
     RTCTime currentTime;
     _rtc.getTime(currentTime);
     
-    // Force display update
+    forceDisplayUpdate(currentTime);
+}
+
+// Helper method implementations
+void DigitalClock::forceDisplayUpdate(const RTCTime& currentTime) {
+    // Update display
     _lcd.updateTimeAndDate(currentTime);
     
-    // Update tracking variables to match current time
+    // Update tracking variables
+    updateTrackingVariables(currentTime);
+}
+
+void DigitalClock::updateTrackingVariables(const RTCTime& currentTime) {
     _lastDisplayedSecond = currentTime.getSeconds();
     _lastDisplayedMinute = currentTime.getMinutes();
     _lastDisplayedHour = currentTime.getHour();
@@ -71,5 +72,3 @@ void DigitalClock::updateCurrentTime() {
     _lastDisplayedMonth = Month2int(currentTime.getMonth()); // Convert Month enum to 1-12 int
     _lastDisplayedYear = currentTime.getYear();
 }
-
- 

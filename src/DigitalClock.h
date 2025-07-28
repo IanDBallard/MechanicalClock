@@ -13,6 +13,10 @@ private:
     int _lastDisplayedMonth;
     int _lastDisplayedYear;
 
+    // Helper methods to eliminate code duplication
+    void updateTrackingVariables(const RTCTime& currentTime);
+    void forceDisplayUpdate(const RTCTime& currentTime);
+
 public:
     DigitalClock(RTClock& rtcRef, LCDDisplay& lcdRef);
 
