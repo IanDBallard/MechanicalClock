@@ -52,9 +52,8 @@ public:
                     RTClock& rtcRef, LCDDisplay& lcdRef);
 
     void begin() override;
-    void update() override;   // Renamed from run()
+    void updateCurrentTime() override; // Unified time update method (normal operation + sync events)
     void handlePowerOff() override; // Mechanical-specific power-off handling (stepper driver, LED)
-    void updateCurrentTime() override; // Sync to current time (unified stepper movement logic)
 
     void setMicrosteppingMode(uint8_t mode);
 

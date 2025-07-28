@@ -18,9 +18,9 @@ void StateManager::update() {
     // Run the current state's logic
     _runCurrentStateLogic();
     
-    // Only update the clock in appropriate states (not during config, connecting, etc.)
+    // Update the clock in appropriate states (not during config, connecting, etc.)
     if (_currentState == STATE_RUNNING || _currentState == STATE_POWER_SAVING) {
-        _clock.update();
+        _clock.updateCurrentTime();
     }
 }
 

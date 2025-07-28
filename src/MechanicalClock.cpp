@@ -87,50 +87,7 @@ void MechanicalClock::begin() {
     Serial.println("MechanicalClock initialized.");
 }
 
-void MechanicalClock::update() {
-    _myStepper.run();
 
-    // Get current UTC time from RTC
-    time_t currentUTC = getCurrentUTC();
-
-    // Calculate time difference since last update
-    long timeDiff = currentUTC - _currentClockTime;
-    
-    // Only move if we have accumulated enough time for at least one step
-    if (abs(timeDiff) >= _secondsPerStep) {
-        long stepsNeeded = timeDiff / _secondsPerStep;
-        
-        // Limit to reasonable movement (sanity check)
-        if (abs(stepsNeeded) > 100) {
-            Serial.print("[WARNING] Excessive steps detected: "); Serial.print(stepsNeeded);
-            Serial.print(" (TimeDiff: "); Serial.print(timeDiff);
-            Serial.println(") - Limiting to reasonable value");
-            stepsNeeded = (stepsNeeded > 0) ? 100 : -100;
-        }
-        
-        if (stepsNeeded != 0) {
-            if (abs(stepsNeeded) > 1) { 
-                Serial.print("[DEBUG] Normal movement - StepsNeeded: "); Serial.print(stepsNeeded);
-                Serial.print(", TimeDiff: "); Serial.println(timeDiff);
-            }
-            
-            _myStepper.move(_myStepper.distanceToGo() + stepsNeeded); 
-            _currentClockTime += stepsNeeded * _secondsPerStep;
-        }
-    }
-
-    // Handle stepper driver enable/disable and LED
-    if (_myStepper.distanceToGo() == 0) {
-        _activityLED.off();
-        if (millis() - _lastStepperMoveTime > _stepperIdleTimeout) {
-            _disableStepperDriver(); 
-        }
-    } else {
-        _enableStepperDriver();
-        _activityLED.on();
-        _lastStepperMoveTime = millis();
-    }
-}
 
 
 
@@ -144,8 +101,10 @@ void MechanicalClock::handlePowerOff() {
 }
 
 void MechanicalClock::updateCurrentTime() {
-    // Unified stepper movement logic for all time synchronization events
-    // Automatically detects large movements and uses shortest path calculation
+    // Unified time update method - handles both normal operation and sync events
+    _myStepper.run(); // Always run stepper to execute any pending movements
+
+    // Get current UTC time from RTC
     time_t currentUTC = getCurrentUTC();
     long timeDiff = currentUTC - _currentClockTime;
     
@@ -192,13 +151,27 @@ void MechanicalClock::updateCurrentTime() {
             }
             
             if (stepsNeeded != 0) {
-                Serial.print("[DEBUG] updateCurrentTime - StepsNeeded: "); Serial.print(stepsNeeded);
-                Serial.print(", TimeDiff: "); Serial.println(timeDiff);
+                if (abs(stepsNeeded) > 1) { 
+                    Serial.print("[DEBUG] Normal movement - StepsNeeded: "); Serial.print(stepsNeeded);
+                    Serial.print(", TimeDiff: "); Serial.println(timeDiff);
+                }
                 
                 _myStepper.move(_myStepper.distanceToGo() + stepsNeeded); 
                 _currentClockTime += stepsNeeded * _secondsPerStep;
             }
         }
+    }
+
+    // Handle stepper driver enable/disable and LED
+    if (_myStepper.distanceToGo() == 0) {
+        _activityLED.off();
+        if (millis() - _lastStepperMoveTime > _stepperIdleTimeout) {
+            _disableStepperDriver(); 
+        }
+    } else {
+        _enableStepperDriver();
+        _activityLED.on();
+        _lastStepperMoveTime = millis();
     }
 }
 

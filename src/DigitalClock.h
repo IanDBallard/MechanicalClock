@@ -21,8 +21,7 @@ public:
     DigitalClock(RTClock& rtcRef, LCDDisplay& lcdRef);
 
     void begin() override;
-    void update() override;   // Optimized updates - only when values change
-    void updateCurrentTime() override; // Force update for time sync events
+    void updateCurrentTime() override; // Unified time update method (optimized + forced updates)
     // handlePowerOff() inherited from base class - no override needed
 };
 

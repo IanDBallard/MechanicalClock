@@ -14,10 +14,14 @@ void DigitalClock::begin() {
     _lcd.printLine(1, "Please Wait");
 }
 
-void DigitalClock::update() {
-    // Get the current time from the RTC
+
+
+
+
+void DigitalClock::updateCurrentTime() {
+    // Unified time update method - handles both normal operation and sync events
     RTCTime currentTime;
-    _rtc.getTime(currentTime); 
+    _rtc.getTime(currentTime);
 
     // Extract current time components
     int currentSecond = currentTime.getSeconds();
@@ -35,24 +39,12 @@ void DigitalClock::update() {
                       (currentMonth != _lastDisplayedMonth) ||
                       (currentYear != _lastDisplayedYear);
 
-    // Only update display if time has changed
-    if (timeChanged) {
-        forceDisplayUpdate(currentTime);
-    }
+    // Always update display (both normal operation and sync events)
+    // The optimization is handled by the helper methods
+    forceDisplayUpdate(currentTime);
     
     // Note: Network status update is now handled by StateManager::runCurrentStateLogic
     // calling lcdDisplay.updateNetworkStatus()
-}
-
-
-
-void DigitalClock::updateCurrentTime() {
-    // Force update for time synchronization events (NTP sync, manual adjustments, etc.)
-    // This bypasses the optimization to ensure display is updated immediately
-    RTCTime currentTime;
-    _rtc.getTime(currentTime);
-    
-    forceDisplayUpdate(currentTime);
 }
 
 // Helper method implementations
