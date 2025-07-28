@@ -52,7 +52,8 @@ Supporting Classes:
 ├── NetworkManager (WiFi/NTP handling)
 ├── LCDDisplay (I2C display interface)
 ├── LED (activity indicator)
-└── TimeUtils (time conversion utilities)
+├── TimeUtils (time conversion utilities)
+└── Constants (centralized configuration)
 ```
 
 ### Data Flow
@@ -70,13 +71,14 @@ Supporting Classes:
 
 **Key Methods**:
 - `begin()` - Initialize clock hardware
-- `update()` - Main operational loop
-- `updateCurrentTime()` - Synchronize to current time
-- `handlePowerOff()` - ISR-safe power-off handling
+- `updateCurrentTime()` - Unified time synchronization (normal operation + sync events)
+- `handlePowerOff()` - ISR-safe power-off handling with EEPROM time saving
 
 **Protected Members**:
 - `RTClock& _rtc` - Reference to RTC instance
 - `LCDDisplay& _lcd` - Reference to LCD display
+
+**Design Pattern**: Template Method Pattern for `handlePowerOff()` - base class provides common EEPROM saving, derived classes add specific actions
 
 ### MechanicalClock
 **Purpose**: Controls stepper motor for mechanical hand movement
@@ -90,16 +92,17 @@ Supporting Classes:
 **Key Methods**:
 ```cpp
 void begin() override;
-void update() override;
-void updateCurrentTime() override;
-void handlePowerOff() override;
+void updateCurrentTime() override; // Unified method (normal + sync events)
+void handlePowerOff() override; // Mechanical-specific (stepper driver, LED)
 void setMicrosteppingMode(uint8_t mode);
 ```
 
 **Movement Logic**:
-- **Normal Movement**: Direct time difference calculation
-- **Large Movement (>6h)**: Shortest path with 12-hour cycle wrap-around
-- **Power Recovery**: Sets initial position, then syncs to current time
+- **Unified Time Updates**: Single `updateCurrentTime()` handles all time synchronization events
+- **Automatic Large Movement Detection**: Time differences >6 hours trigger shortest path calculation
+- **Shortest Path Movement**: 12-hour cycle wrap-around for large time changes
+- **Power Recovery**: EEPROM-based position restoration in `begin()`
+- **Stepper Management**: Automatic enable/disable based on movement activity
 
 ### DigitalClock
 **Purpose**: Manages LCD display updates
@@ -112,17 +115,21 @@ void setMicrosteppingMode(uint8_t mode);
 **Key Methods**:
 ```cpp
 void begin() override;
-void update() override;
-void updateCurrentTime() override;
-void handlePowerOff() override;
+void updateCurrentTime() override; // Unified method (normal + sync events)
+// handlePowerOff() inherited from base class (EEPROM time saving only)
 ```
+
+**Optimization Features**:
+- **Display Optimization**: `_lastDisplayed*` variables prevent unnecessary LCD writes
+- **Helper Methods**: `updateTrackingVariables()` and `forceDisplayUpdate()` for code reuse
+- **Time Component Tracking**: Monitors second, minute, hour, day, month, year changes
 
 ### StateManager
 **Purpose**: Centralized state machine for system control flow
 
 **States**:
 - `STATE_INIT` - Initial system setup
-- `STATE_CONFIG` - WiFi configuration mode
+- `STATE_CONFIG` - WiFi configuration mode  
 - `STATE_CONNECTING_WIFI` - WiFi connection attempt
 - `STATE_SYNCING_TIME` - NTP time synchronization
 - `STATE_RUNNING` - Normal clock operation
@@ -131,14 +138,35 @@ void handlePowerOff() override;
 **Key Methods**:
 ```cpp
 void update() - Main state machine loop
-void transitionTo(ClockState newState) - State transitions
-bool isInState(ClockState state) - State checking
+void transitionTo(ClockState newState) - State transitions with validation
+ClockState getCurrentState() const - Get current state
+void setLastError(const String& error) - Set error message
+String getLastError() const - Get last error
+void printStateInfo() - Debug state information
 ```
 
 **State Transitions**:
+- **Validated Transitions**: All state changes validated via `_isValidTransition()`
 - **Graceful Degradation**: Timeout → Continue without network
 - **Error Recovery**: Error state → Retry with delays
 - **Automatic Sync**: Running state → Periodic NTP checks
+
+**Timeout Constants**:
+```cpp
+CONFIG_TIMEOUT_MS = 300000UL        // 5 minutes
+WIFI_CONNECT_TIMEOUT_MS = 30000UL   // 30 seconds
+NTP_SYNC_TIMEOUT_MS = 30000UL       // 30 seconds
+ERROR_DISPLAY_TIMEOUT_MS = 5000UL   // 5 seconds
+DEBUG_PRINT_INTERVAL_MS = 300000UL  // 5 minutes
+```
+
+**State Validation Rules**:
+- `STATE_INIT` → `STATE_CONFIG` or `STATE_CONNECTING_WIFI`
+- `STATE_CONFIG` → `STATE_CONNECTING_WIFI` or `STATE_ERROR`
+- `STATE_CONNECTING_WIFI` → `STATE_SYNCING_TIME`, `STATE_RUNNING`, or `STATE_ERROR`
+- `STATE_SYNCING_TIME` → `STATE_RUNNING` or `STATE_ERROR`
+- `STATE_RUNNING` → `STATE_CONNECTING_WIFI`, `STATE_SYNCING_TIME`, or `STATE_ERROR`
+- `STATE_ERROR` → `STATE_INIT` (recovery)
 
 ### NetworkManager
 **Purpose**: WiFi connectivity and NTP time synchronization
@@ -154,9 +182,12 @@ bool isInState(ClockState state) - State checking
 ```cpp
 bool begin() - Initialize network hardware
 bool connectToWiFi() - Establish WiFi connection
-bool syncTimeWithNTP() - Synchronize with NTP server
+bool syncTimeWithRTC(RTClock& rtc) - Synchronize with NTP server
 bool needsConfiguration() - Check if WiFi setup required
 void startConfigurationMode() - Enter AP mode
+void resetNtpSyncCounter() - Defer next NTP sync
+int getTimeZoneOffset() const - Get timezone offset
+bool getUseDST() const - Get DST setting
 ```
 
 **Configuration Portal**:
@@ -176,17 +207,28 @@ void startConfigurationMode() - Enter AP mode
 
 **Key Methods**:
 ```cpp
-bool begin() - Initialize I2C display
-void updateTimeAndDate(const RTCTime& time) - Update time display
-void updateNetworkStatus(bool wifiConnected, bool ntpSynced) - Update status
-void displayError(const String& message, bool overlay, unsigned long duration)
+bool begin() - Initialize I2C display with smart buffer
+void updateTimeAndDate(const RTCTime& time) - Update time/date area (columns 0-14)
+void updateNetworkStatus(bool wifiConnected, bool ntpSynced) - Update status icons (column 15)
+void printLine(uint8_t line, const String& message) - Print message to line (columns 0-14)
 ```
+
+**Smart Buffer System**:
+- **In-Memory Buffer**: `_buffer[LCD_HEIGHT][LCD_WIDTH]` stores current display state
+- **Dirty Flag Tracking**: `_lineDirty[]` and `_charDirty[][]` track changes
+- **Constrained Areas**: Each method writes only to its designated area
+- **Flicker Reduction**: Only changed characters are written to physical LCD
+- **Artifact Elimination**: No need for clearing before writing
 
 **Display Layout**:
 ```
-Line 0: [Time] [Date] [Day of Week]
-Line 1: [WiFi Icon] [Sync Icon] [Status Message]
+Line 0: [Time/Date Area 0-14] [WiFi Icon 15]
+Line 1: [Message Area 0-14]   [Sync Icon 15]
 ```
+
+**Area Constraints**:
+- **Time/Date/Message**: Columns 0-14 (15 characters)
+- **Status Icons**: Column 15 only (1 character per line)
 
 ### LED
 **Purpose**: Activity indicator LED control
@@ -201,6 +243,34 @@ Line 1: [WiFi Icon] [Sync Icon] [Status Message]
 void begin() - Initialize LED pin
 void on() - Turn LED on
 void off() - Turn LED off
+```
+
+### Constants
+**Purpose**: Centralized configuration and constants management
+
+**Key Categories**:
+- **EEPROM Addresses**: All EEPROM storage locations
+- **Hardware Pins**: All pin definitions for stepper, LCD, LED, power detection
+- **Network Configuration**: WiFi, NTP, and timezone settings
+- **Timing Constants**: Timeouts, intervals, and delays
+- **Stepper Configuration**: Microstepping modes and step calculations
+
+**Key Constants**:
+```cpp
+// EEPROM Addresses
+EEPROM_ADDRESS_WIFI_CREDENTIALS = 0
+EEPROM_ADDRESS_POWER_DOWN_TIME = 32
+
+// Hardware Pins
+STEP_PIN = 8, DIR_PIN = 7, ENABLE_PIN = 3
+MS1_PIN = 4, MS2_PIN = 5, MS3_PIN = 6
+LED_PIN = 13, POWER_PIN = 2
+
+// Network Configuration
+AP_SSID = "ClockSetup"
+NTP_SYNC_INTERVAL = 3600000UL // 1 hour
+TIME_ZONE_OFFSET_HOURS = -4
+USE_DST_AUTO_CALC = true
 ```
 
 ### TimeUtils
@@ -397,7 +467,55 @@ Enable debug output by checking serial monitor at 115200 baud:
 
 ## Version History
 
-### V2.1.7 (Current)
+### V2.1.15 (Current)
+- **StateManager Cleanup**: Removed unused `STATE_POWER_SAVING` state
+- **State Validation**: Added `_isValidTransition()` method for robust state changes
+- **Timeout Constants**: Centralized all timeout values with named constants
+- **Error Handling**: Fixed static variable issue in error state recovery
+- **Dependencies**: Added missing `TimeUtils.h` include
+- **Code Quality**: 29 lines removed, 60 lines added for improved functionality
+
+### V2.1.14
+- **NetworkManager Cleanup**: Removed unused `syncTimeWithNTP()` placeholder method
+- **Interface Cleanup**: Eliminated dead code that could mislead developers
+- **StateManager Integration**: Confirmed proper use of `syncTimeWithRTC()` method
+
+### V2.1.13
+- **LCD Smart Buffer**: Implemented "Smart Buffer with Region Tracking" system
+- **Constrained Areas**: Each display method writes only to its designated area
+- **Flicker Reduction**: Only changed characters written to physical LCD
+- **Error System Removal**: Eliminated unused `displayError()` system and `_errorDisplayed` flag
+- **Artifact Elimination**: No more clearing artifacts on LCD updates
+
+### V2.1.12
+- **Method Consolidation**: Merged `update()` and `updateCurrentTime()` into single unified method
+- **Simplified Interface**: Both `MechanicalClock` and `DigitalClock` use single update method
+- **StateManager Update**: Updated to use unified `updateCurrentTime()` method
+- **Code Reduction**: Eliminated duplicate logic between update methods
+
+### V2.1.11
+- **Code Reuse**: Extracted common logic into helper methods for `DigitalClock`
+- **Helper Methods**: `updateTrackingVariables()` and `forceDisplayUpdate()`
+- **DRY Principle**: Eliminated code duplication in time extraction and tracking
+
+### V2.1.10
+- **Template Method Pattern**: Moved common EEPROM saving to base `Clock` class
+- **Inheritance Optimization**: `MechanicalClock` overrides for stepper/LED handling
+- **Code Reuse**: `DigitalClock` inherits base implementation
+- **OOP Best Practices**: Proper use of inheritance and polymorphism
+
+### V2.1.9
+- **Display Optimization**: Implemented actual display optimization using `_lastDisplayed*` variables
+- **LCD Efficiency**: Prevents unnecessary LCD writes when values haven't changed
+- **Method Refactoring**: Updated `update()` and `updateCurrentTime()` for optimization
+- **RTCTime Fixes**: Corrected method calls to use proper `RTCTime` getters
+
+### V2.1.8
+- **Documentation Structure**: Created comprehensive `DOCUMENTATION.md` file
+- **Best Practices**: Added development guidelines and coding standards
+- **Version Tracking**: Enhanced change tracking and documentation
+
+### V2.1.7
 - **Unified Time Sync**: Consolidated `updateCurrentTime()` method
 - **Removed Redundancy**: Eliminated `adjustToInitialTime()` method
 - **Automatic Detection**: Large movements trigger shortest path calculation
@@ -466,5 +584,5 @@ Enable debug output by checking serial monitor at 115200 baud:
 
 ---
 
-*Last Updated: V2.1.7*
-*Documentation Version: 1.0* 
+*Last Updated: V2.1.15*
+*Documentation Version: 1.1* 
