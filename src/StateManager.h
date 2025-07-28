@@ -5,6 +5,7 @@
 #include "NetworkManager.h"
 #include "LCDDisplay.h"
 #include "Clock.h"
+#include "TimeUtils.h" // For getCurrentUTC() and convertUTCToLocal()
 
 // State enumeration
 enum ClockState {
@@ -13,9 +14,16 @@ enum ClockState {
     STATE_CONNECTING_WIFI = 2,
     STATE_SYNCING_TIME = 3,
     STATE_RUNNING = 4,
-    STATE_ERROR = 5,
-    STATE_POWER_SAVING = 6
+    STATE_ERROR = 5
+    // STATE_POWER_SAVING removed - unused state
 };
+
+// State timeout constants
+const unsigned long CONFIG_TIMEOUT_MS = 300000UL;    // 5 minutes
+const unsigned long WIFI_CONNECT_TIMEOUT_MS = 30000UL; // 30 seconds  
+const unsigned long NTP_SYNC_TIMEOUT_MS = 30000UL;   // 30 seconds
+const unsigned long ERROR_DISPLAY_TIMEOUT_MS = 5000UL; // 5 seconds
+const unsigned long DEBUG_PRINT_INTERVAL_MS = 300000UL; // 5 minutes
 
 class StateManager {
 private:
@@ -46,7 +54,9 @@ private:
     void _runSyncingTimeState();
     void _runRunningState();
     void _runErrorState();
-    void _runPowerSavingState();
+    
+    // State validation
+    bool _isValidTransition(ClockState fromState, ClockState toState) const;
 
 public:
     StateManager(NetworkManager& networkManager, LCDDisplay& lcdDisplay, 

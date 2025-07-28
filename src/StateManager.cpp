@@ -10,7 +10,7 @@ StateManager::StateManager(NetworkManager& networkManager, LCDDisplay& lcdDispla
 
 void StateManager::update() {
     // Print state info every 5 minutes
-    if (millis() - _lastDebugPrint > 300000UL) {
+    if (millis() - _lastDebugPrint > DEBUG_PRINT_INTERVAL_MS) {
         _lastDebugPrint = millis();
         printStateInfo();
     }
@@ -19,7 +19,7 @@ void StateManager::update() {
     _runCurrentStateLogic();
     
     // Update the clock in appropriate states (not during config, connecting, etc.)
-    if (_currentState == STATE_RUNNING || _currentState == STATE_POWER_SAVING) {
+    if (_currentState == STATE_RUNNING) {
         _clock.updateCurrentTime();
     }
 }
@@ -27,6 +27,15 @@ void StateManager::update() {
 void StateManager::transitionTo(ClockState newState) {
     if (_currentState == newState) {
         return; // No state change needed
+    }
+    
+    // Validate state transition
+    if (!_isValidTransition(_currentState, newState)) {
+        Serial.print("Invalid state transition: ");
+        Serial.print(_currentState);
+        Serial.print(" -> ");
+        Serial.println(newState);
+        return;
     }
     
     Serial.print("State change: ");
@@ -109,12 +118,6 @@ void StateManager::_handleStateEntry(ClockState newState) {
             _lcdDisplay.printLine(0, "ERROR:");
             _lcdDisplay.printLine(1, _lastError);
             break;
-            
-        case STATE_POWER_SAVING:
-            Serial.println("Entering power saving mode...");
-            _lcdDisplay.printLine(0, "Power Saving");
-            _lcdDisplay.printLine(1, "Mode Active");
-            break;
     }
 }
 
@@ -159,10 +162,6 @@ void StateManager::_runCurrentStateLogic() {
         case STATE_ERROR:
             _runErrorState();
             break;
-            
-        case STATE_POWER_SAVING:
-            _runPowerSavingState();
-            break;
     }
 }
 
@@ -184,7 +183,7 @@ void StateManager::_runConfigState() {
     }
     
     // Timeout after 5 minutes in config mode
-    if (millis() - _configStartTime > 300000UL) {
+    if (millis() - _configStartTime > CONFIG_TIMEOUT_MS) {
         setLastError("Config Timeout");
         transitionTo(STATE_ERROR);
     }
@@ -197,7 +196,7 @@ void StateManager::_runConnectingWiFiState() {
     }
     
     // Timeout after 30 seconds
-    if (millis() - _wifiConnectStartTime > 30000UL) {
+    if (millis() - _wifiConnectStartTime > WIFI_CONNECT_TIMEOUT_MS) {
         // Reset NTP sync counter and return to running state
         _networkManager.resetNtpSyncCounter();
         transitionTo(STATE_RUNNING);
@@ -213,7 +212,7 @@ void StateManager::_runSyncingTimeState() {
     }
     
     // Timeout after 30 seconds
-    if (millis() - _ntpSyncStartTime > 30000UL) {
+    if (millis() - _ntpSyncStartTime > NTP_SYNC_TIMEOUT_MS) {
         // Reset NTP sync counter and return to running state
         _networkManager.resetNtpSyncCounter();
         transitionTo(STATE_RUNNING);
@@ -247,21 +246,43 @@ void StateManager::_runRunningState() {
 void StateManager::_runErrorState() {
     // Display error for 5 seconds, then try to recover
     static unsigned long errorStartTime = 0;
-    if (errorStartTime == 0) {
+    static bool errorTimerStarted = false;
+    
+    if (!errorTimerStarted) {
         errorStartTime = millis();
+        errorTimerStarted = true;
     }
     
-    if (millis() - errorStartTime > 5000UL) {
-        errorStartTime = 0; // Reset for next error
+    if (millis() - errorStartTime > ERROR_DISPLAY_TIMEOUT_MS) {
+        errorTimerStarted = false; // Reset for next error
         transitionTo(STATE_INIT); // Try to recover
     }
 }
 
-void StateManager::_runPowerSavingState() {
-    // Minimal operation in power saving mode
-    // The ISR has already saved the time and disabled the stepper
-    // This state is mainly for display purposes
-    
-    // Could implement additional power saving measures here
-    // For now, just stay in this state until power is restored
-} 
+bool StateManager::_isValidTransition(ClockState fromState, ClockState toState) const {
+    // Define valid state transitions
+    switch (fromState) {
+        case STATE_INIT:
+            return (toState == STATE_CONFIG || toState == STATE_CONNECTING_WIFI);
+            
+        case STATE_CONFIG:
+            return (toState == STATE_CONNECTING_WIFI || toState == STATE_ERROR);
+            
+        case STATE_CONNECTING_WIFI:
+            return (toState == STATE_SYNCING_TIME || toState == STATE_RUNNING || toState == STATE_ERROR);
+            
+        case STATE_SYNCING_TIME:
+            return (toState == STATE_RUNNING || toState == STATE_ERROR);
+            
+        case STATE_RUNNING:
+            return (toState == STATE_CONNECTING_WIFI || toState == STATE_SYNCING_TIME || toState == STATE_ERROR);
+            
+        case STATE_ERROR:
+            return (toState == STATE_INIT);
+            
+        default:
+            return false;
+    }
+}
+
+ 
