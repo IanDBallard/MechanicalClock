@@ -49,19 +49,39 @@ void MechanicalClock::_setMicrostepping(uint8_t mode) {
 
 void MechanicalClock::begin() {
     Serial.println("MechanicalClock::begin() called.");
+    
+    // Hardware initialization
     pinMode(_enablePin, OUTPUT);
     _disableStepperDriver();
-
     setMicrosteppingMode(CURRENT_MICROSTEP);
-
     _myStepper.setMaxSpeed(50);
     _myStepper.setAcceleration(2);
     _myStepper.setSpeed(5);
-
+    
+    // Power recovery logic
+    time_t powerDownTime = 0;
+    EEPROM.get(EEPROM_ADDRESS_INITIAL_TIME, powerDownTime);
+    Serial.print("Power-down time from EEPROM: "); Serial.println(powerDownTime);
+    
+    if (powerDownTime != 0) {
+        Serial.println("Power-down time found - will calculate stepper adjustment");
+        // Clear the saved time immediately to avoid re-using it
+        time_t clearValue = 0;
+        EEPROM.put(EEPROM_ADDRESS_INITIAL_TIME, clearValue);
+        Serial.println("✓ Cleared saved power-down time from EEPROM.");
+        
+        // Calculate and set initial position based on power-down time
+        adjustToInitialTime(powerDownTime);
+    } else {
+        Serial.println("No power-down time found - assuming warm boot, no adjustment needed");
+        // Set current position based on current time (no power-down adjustment)
+        adjustToInitialTime(0);
+    }
+    
     _activityLED.on();
     delay(200);
     _activityLED.off();
-
+    
     Serial.println("MechanicalClock initialized.");
 }
 

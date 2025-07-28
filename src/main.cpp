@@ -71,24 +71,9 @@ const bool USE_DST_AUTO_CALC = true;    // Enable automatic DST calculation
 // You might need to add extern "C" { #include <hal_data.h> } if compiler complains.
 // If you don't have hal_data.h, you might need to manually define these addresses
 // based on Renesas RA4M1 datasheet or Arduino R4 core files.
-#define SYSTEM_RSTSR0 (*(volatile uint8_t*)0x4001E400)
-#define SYSTEM_RSTSR1 (*(volatile uint8_t*)0x4001E401)
-#define SYSTEM_RSTSR2 (*(volatile uint8_t*)0x4001E402)
 
-// RSTSR0 Flags (Bit Masks)
-#define PORF_BIT    0
-#define LVD0RF_BIT  1
-#define LVD1RF_BIT  2
-#define LVD2RF_BIT  3
-#define DPSRSTF_BIT 4
 
-// RSTSR1 Flags (Bit Masks)
-#define CWSF_BIT    0 // Cold Warm Start Flag
 
-// RSTSR2 Flags (Bit Masks)
-#define IWDTRF_BIT  0 // Independent Watchdog Timer Reset Flag
-#define WDTRF_BIT   1 // Watchdog Timer Reset Flag
-#define SWRF_BIT    2 // Software Reset Flag
 
 // --- Global Instances of Our Classes ---
 // Note: These are declared as global variables so they can be accessed by the ISR
@@ -146,33 +131,7 @@ void setup() {
     Serial.println("=== Mechanical Clock with Onboard RTC ===");
     Serial.println("Initializing system...");
     
-    // --- Reset Cause Detection ---
-    // Read the Renesas RA4M1 Reset Status Registers to determine why we reset
-    uint8_t rstsr0 = SYSTEM_RSTSR0;
-    uint8_t rstsr1 = SYSTEM_RSTSR1;
-    uint8_t rstsr2 = SYSTEM_RSTSR2;
-    
-    // Determine reset cause
-    bool powerRelatedReset = (rstsr0 & (1 << PORF_BIT)) != 0; // Power-on reset flag
-    bool isExternalReset = (rstsr1 & (1 << CWSF_BIT)) != 0;   // External reset flag
-    bool isSoftwareReset = (rstsr2 & (1 << SWRF_BIT)) != 0;   // Software reset flag
-    bool isWatchdogReset = (rstsr2 & (1 << WDTRF_BIT)) != 0;  // Watchdog reset flag
-    
-    Serial.print("Reset Status - RSTSR0: 0x"); Serial.print(rstsr0, HEX);
-    Serial.print(", RSTSR1: 0x"); Serial.print(rstsr1, HEX);
-    Serial.print(", RSTSR2: 0x"); Serial.println(rstsr2, HEX);
-    
-    if (powerRelatedReset) {
-        Serial.println("Reset Cause: Power-related reset (Power-on, Brown-out, etc.).");
-    } else if (isSoftwareReset) {
-        Serial.println("Reset Cause: Software Reset (Reset() function call).");
-    } else if (isWatchdogReset) {
-        Serial.println("Reset Cause: Watchdog Timer Reset.");
-    } else if (isExternalReset) { // External Reset (RESET button, IDE upload, debugger detach)
-        Serial.println("Reset Cause: External Reset (Pin/Upload/Debug).");
-    } else {
-        Serial.println("Reset Cause: Unknown or Initial Cold Boot (No specific flags set).");
-    }
+
     
     // --- Hardware Initialization ---
     Serial.println("Initializing core hardware...");
@@ -205,37 +164,7 @@ void setup() {
     mechanicalClock.begin(); // Initializes stepper pins, microstepping, etc.
     Serial.println("MechanicalClock initialized.");
 
-    // Determine initial clock time source based on reset cause
-    time_t initialClockTime = 0; // Default to epoch 0
-    bool useEEPROMForTime = powerRelatedReset; // Use EEPROM time if power-related reset
 
-    if (useEEPROMForTime) {
-        // Define EEPROM address for initial time if not already defined
-        #ifndef EEPROM_ADDRESS_INITIAL_TIME
-        #define EEPROM_ADDRESS_INITIAL_TIME 0
-        #endif
-        EEPROM.get(EEPROM_ADDRESS_INITIAL_TIME, initialClockTime);
-        Serial.print("Attempting to load time from EEPROM: "); Serial.println(initialClockTime);
-        // Validate EEPROM time: a Unix timestamp for a reasonable year (e.g., 2023-01-01)
-        if (initialClockTime < 1672531200UL) { // 1672531200 is Jan 1, 2023 00:00:00 UTC
-            Serial.println("EEPROM time invalid/unset, falling back to current RTC time.");
-            RTCTime tempNow;
-            RTC.getTime(tempNow);
-            initialClockTime = tempNow.getUnixTime();
-        } else {
-            // Clear the saved time immediately after reading it to avoid re-using old time if power fluctuates
-            time_t clearValue = 0;
-            EEPROM.put(EEPROM_ADDRESS_INITIAL_TIME, clearValue);
-            Serial.println("✓ Cleared saved power-down time from EEPROM.");
-        }
-    } else { // Soft reset, watchdog, external reset, or first cold boot
-        RTCTime tempNow;
-        RTC.getTime(tempNow); // Get current time from RTC
-        initialClockTime = tempNow.getUnixTime();
-        Serial.print("Initial time from RTC: "); Serial.println(initialClockTime);
-    }
-    mechanicalClock.adjustToInitialTime(initialClockTime); // Set clock hands to this initial time
-    Serial.print("Clock hands initialized to Unix time: "); Serial.println(initialClockTime);
 
     // --- NetworkManager Initialization ---
     // NetworkManager's begin() will load credentials and timezone from EEPROM
