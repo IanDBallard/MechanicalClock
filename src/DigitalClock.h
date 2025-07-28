@@ -13,16 +13,13 @@ private:
     int _lastDisplayedMonth;
     int _lastDisplayedYear;
 
-    // bool calculateDST(const RTCTime& time); // This should be in TimeUtils
-
 public:
     DigitalClock(RTClock& rtcRef, LCDDisplay& lcdRef);
 
     void begin() override;
-    void update() override;   // Renamed from run()
-
-        void handlePowerOff() override;
-    void updateCurrentTime() override; // Sync to current time (unified display update logic)
+    void update() override;   // Optimized updates - only when values change
+    void handlePowerOff() override;
+    void updateCurrentTime() override; // Force update for time sync events
 };
 
 #endif // DIGITAL_CLOCK_H 
