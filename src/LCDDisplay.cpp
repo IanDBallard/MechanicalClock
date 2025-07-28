@@ -47,6 +47,9 @@ bool LCDDisplay::begin() {
         _lcd.createChar(0, _wifiSymbol);
         _lcd.createChar(1, _syncSymbol);
 
+        // Initialize the smart buffer system
+        initializeBuffer();
+
         Serial.println("LCD initialized successfully.");
         return true; // Indicate success
     } else {
@@ -60,7 +63,7 @@ bool LCDDisplay::begin() {
 // Always updates both lines to ensure status messages get replaced
 // Respects real estate boundaries and doesn't overwrite status icons
 void LCDDisplay::updateTimeAndDate(const RTCTime& currentTime) {
-    if (!_initialized || _errorDisplayed) return; // Do nothing if LCD is not initialized or error is displayed
+    if (!_initialized) return; // Do nothing if LCD is not initialized
 
     // Get current time components from the RTCTime object
     int currentDay = currentTime.getDayOfMonth();
@@ -70,8 +73,7 @@ void LCDDisplay::updateTimeAndDate(const RTCTime& currentTime) {
     int currentMonth = Month2int(currentTime.getMonth()); // Convert Month enum to 1-12 int
     int currentYear = currentTime.getYear();
 
-    // Always update date display to ensure "Clock Running" message gets replaced
-    _lcd.setCursor(DATE_START, 0); // Set cursor to date start position
+    // Update date display using smart buffer
     char dateStr[15]; // Buffer for date string: "DD/MMM/YY WWW" (14 chars max)
     
     // Use RTC library's day calculation since it appears to be correct
@@ -89,31 +91,37 @@ void LCDDisplay::updateTimeAndDate(const RTCTime& currentTime) {
     if (dateDisplay.length() > (DATE_END - DATE_START + 1)) {
         dateDisplay = dateDisplay.substring(0, DATE_END - DATE_START + 1);
     }
-    _lcd.print(dateDisplay);
+    
+    // Create full area content for both lines (positions 0-14)
+    String fullAreaContent = dateDisplay;
+    
+    // Add time content for line 1
+    char timeStr[9]; // Buffer for time string: "HH:MM:SS\0"
+    snprintf(timeStr, sizeof(timeStr), "%02d:%02d:%02d", 
+            currentHour, currentMinute, currentSecond);
+    
+    // Pad time string to fill positions 0-14 on line 1
+    String timeDisplay = String(timeStr);
+    while (timeDisplay.length() < 15) {
+        timeDisplay += " "; // Pad with spaces
+    }
+    
+    // Combine date and time for full area update
+    fullAreaContent += timeDisplay;
+    
+    // Update full area (both lines, positions 0-14) - only writes to LCD if changed
+    updateBufferArea(0, 1, 0, 14, fullAreaContent);
     
     // Update last displayed values
     _lastDisplayedDay = currentDay;
     _lastDisplayedMonth = currentMonth;
     _lastDisplayedYear = currentYear;
+    _lastDisplayedHour = currentHour;
+    _lastDisplayedMinute = currentMinute;
+    _lastDisplayedSecond = currentSecond;
     
-    // Update time display only if hour, minute, or second has changed
-    if (_lastDisplayedHour != currentHour || _lastDisplayedMinute != currentMinute || _lastDisplayedSecond != currentSecond) {
-        char timeStr[9]; // Buffer for time string: "HH:MM:SS\0"
-        snprintf(timeStr, sizeof(timeStr), "%02d:%02d:%02d", 
-                currentHour, currentMinute, currentSecond);
-        _lcd.setCursor(TIME_START, 1); // Set cursor to time start position
-        _lcd.print(timeStr); // Print the formatted time
-        
-        // Clear the area after time display (positions 8-14) to remove artifacts
-        // but preserve the status icon at position 15
-        _lcd.setCursor(8, 1);
-        _lcd.print("       "); // Clear 7 spaces (positions 8-14)
-        
-        // Update last displayed values
-        _lastDisplayedHour = currentHour;
-        _lastDisplayedMinute = currentMinute;
-        _lastDisplayedSecond = currentSecond;
-    }
+    // Sync any changed regions to the LCD
+    syncDirtyRegions();
 }
 
 // updateNetworkStatus(): Updates only the network status icons (WiFi and NTP sync)
@@ -127,91 +135,158 @@ void LCDDisplay::updateNetworkStatus(int wifiStatus, unsigned long lastNtpSync, 
         _statusBlinkState = !_statusBlinkState; // Toggle blink state
         
         // WiFi status icon - top right corner (dedicated position)
-        _lcd.setCursor(WIFI_ICON_POS, 0); // Position for WiFi icon
-        if (wifiStatus == WL_CONNECTED) {
-            _lcd.write(byte(0));  // Display solid WiFi symbol (char 0)
-        } else {
-            // Blink WiFi symbol if not connected
-            _lcd.print(_statusBlinkState ? (char)byte(0) : ' ');  
-        }
+        char wifiChar = (wifiStatus == WL_CONNECTED) ? (char)byte(0) : (_statusBlinkState ? (char)byte(0) : ' ');
         
         // NTP sync status icon - bottom right corner (dedicated position)
-        _lcd.setCursor(SYNC_ICON_POS, 1); // Position for Sync icon
         // Check if last sync was within the interval (plus a grace period)
         // This makes the sync icon solid for a while after sync, then blinks if overdue.
-        if (millis() - lastNtpSync < ntpSyncInterval + (ntpSyncInterval / 4)) { // 25% grace period
-            _lcd.write(byte(1));  // Display solid Sync symbol (char 1)
-        } else {
-            // Blink Sync symbol if sync is overdue
-            _lcd.print(_statusBlinkState ? (char)byte(1) : ' ');  
-        }
-    }
-}
-
-// displayError(): Displays an error message on the LCD with overlay capability
-void LCDDisplay::displayError(const String& errorMsg, bool overlay, unsigned long duration) {
-    if (!_initialized) return;
-    
-    _errorDisplayed = true;
-    _errorStartTime = millis();
-    _errorDuration = duration;
-    
-    if (overlay) {
-        // Overlay mode: preserve time/date and show error in available space
-        // Use positions 8-14 on line 1 (after time display)
-        _lcd.setCursor(8, 1); // Start after time display
-        String errorDisplay = errorMsg.substring(0, 8); // Max 8 chars to fit in available space
-        _lcd.print(errorDisplay);
-    } else {
-        // Full error mode: clear display and show error prominently, but preserve status icons
-        // Clear lines 0 and 1 except for status icons at position 15
-        _lcd.setCursor(0, 0);
-        _lcd.print("               "); // Clear positions 0-14 on line 0
-        _lcd.setCursor(0, 1);
-        _lcd.print("               "); // Clear positions 0-14 on line 1
+        char syncChar = (millis() - lastNtpSync < ntpSyncInterval + (ntpSyncInterval / 4)) ? 
+                       (char)byte(1) : (_statusBlinkState ? (char)byte(1) : ' ');
         
-        _lcd.setCursor(ERROR_LINE_START, 0); // Set cursor to top-left
-        _lcd.print("ERROR:");
-        _lcd.setCursor(ERROR_LINE_START, 1); // Set cursor to bottom-left
-        _lcd.print(errorMsg.substring(0, LCD_WIDTH - 1)); // Print error message, but don't overwrite status icon
+        // Update status area (both lines, position 15) - only writes to LCD if changed
+        updateStatusArea(0, wifiChar, syncChar);
+        
+        // Sync any changed regions to the LCD
+        syncDirtyRegions();
     }
-    _lcd.backlight(); // Ensure backlight is on for error visibility
 }
 
-// clearError(): Clears error display and restores normal display, preserving status icons
-void LCDDisplay::clearError() {
-    if (!_initialized || !_errorDisplayed) return;
-    
-    _errorDisplayed = false;
-    
-    // Clear the error area and restore normal display, but preserve status icons
-    _lcd.setCursor(0, 0);
-    _lcd.print("               "); // Clear positions 0-14 on line 0
-    _lcd.setCursor(0, 1);
-    _lcd.print("               "); // Clear positions 0-14 on line 1
-    
-    // Re-initialize display with current time/date
-    // Note: This will be updated on next updateTimeAndDate() call
-}
+
+
+
 
 // printLine(): Prints a message to a specific line on the LCD, preserving status icons
 void LCDDisplay::printLine(uint8_t line, const String& msg) {
     if (!_initialized) return;
     
-    // Clear the line except for the status icon at position 15
-    _lcd.setCursor(0, line); // Set cursor to the start of the specified line
-    _lcd.print("               "); // Clear positions 0-14 (15 spaces)
-    // Don't clear position 15 - preserve the status icon
+    // Pad message to fill positions 0-14 (preserving status icon at position 15)
+    String paddedMsg = msg.substring(0, LCD_WIDTH - 1);
+    while (paddedMsg.length() < 15) {
+        paddedMsg += " "; // Pad with spaces
+    }
     
-    _lcd.setCursor(0, line); // Reset cursor to the start of the line
-    _lcd.print(msg.substring(0, LCD_WIDTH - 1)); // Print the new message, but don't overwrite status icon
+    // Update constrained area (specific line, positions 0-14) - only writes to LCD if changed
+    updateBufferArea(line, line, 0, 14, paddedMsg);
+    
+    // Sync any changed regions to the LCD
+    syncDirtyRegions();
+}
+
+// Smart Buffer Implementation Methods
+
+// initializeBuffer(): Initialize buffer with current LCD content
+void LCDDisplay::initializeBuffer() {
+    if (!_initialized) return;
+    
+    // Initialize buffer with spaces (assume LCD is clear)
+    for (int line = 0; line < LCD_HEIGHT; line++) {
+        for (int col = 0; col < LCD_WIDTH; col++) {
+            _buffer[line][col] = ' ';
+            _charDirty[line][col] = false;
+        }
+        _buffer[line][LCD_WIDTH] = '\0'; // Null terminate
+        _lineDirty[line] = false;
+    }
+    _bufferInitialized = true;
+}
+
+// updateBufferArea(): Update constrained area in buffer and mark as dirty
+void LCDDisplay::updateBufferArea(uint8_t startLine, uint8_t endLine, uint8_t startCol, uint8_t endCol, const String& content) {
+    if (!_bufferInitialized || startLine >= LCD_HEIGHT || endLine >= LCD_HEIGHT || 
+        startCol >= LCD_WIDTH || endCol >= LCD_WIDTH) return;
+    
+    uint8_t contentIndex = 0;
+    
+    // Update each line in the area
+    for (uint8_t line = startLine; line <= endLine && line < LCD_HEIGHT; line++) {
+        for (uint8_t col = startCol; col <= endCol && col < LCD_WIDTH; col++) {
+            char newChar = (contentIndex < content.length()) ? content[contentIndex++] : ' ';
+            
+            if (_buffer[line][col] != newChar) {
+                _buffer[line][col] = newChar;
+                _charDirty[line][col] = true;
+                _lineDirty[line] = true;
+            }
+        }
+    }
+}
+
+// updateStatusArea(): Update status icons (position 15) on both lines
+void LCDDisplay::updateStatusArea(uint8_t line, char wifiChar, char syncChar) {
+    if (!_bufferInitialized || line >= LCD_HEIGHT) return;
+    
+    // Update WiFi icon on line 0, position 15
+    if (_buffer[0][WIFI_ICON_POS] != wifiChar) {
+        _buffer[0][WIFI_ICON_POS] = wifiChar;
+        _charDirty[0][WIFI_ICON_POS] = true;
+        _lineDirty[0] = true;
+    }
+    
+    // Update Sync icon on line 1, position 15
+    if (_buffer[1][SYNC_ICON_POS] != syncChar) {
+        _buffer[1][SYNC_ICON_POS] = syncChar;
+        _charDirty[1][SYNC_ICON_POS] = true;
+        _lineDirty[1] = true;
+    }
+}
+
+// clearBufferLine(): Clear a line in buffer and mark as dirty
+void LCDDisplay::clearBufferLine(uint8_t line) {
+    if (!_bufferInitialized || line >= LCD_HEIGHT) return;
+    
+    for (int col = 0; col < LCD_WIDTH; col++) {
+        if (_buffer[line][col] != ' ') {
+            _buffer[line][col] = ' ';
+            _charDirty[line][col] = true;
+            _lineDirty[line] = true;
+        }
+    }
+}
+
+// clearBuffer(): Clear entire buffer and mark all lines as dirty
+void LCDDisplay::clearBuffer() {
+    if (!_initialized) return;
+    
+    for (int line = 0; line < LCD_HEIGHT; line++) {
+        clearBufferLine(line);
+    }
+}
+
+// syncDirtyRegions(): Sync only changed regions to LCD
+void LCDDisplay::syncDirtyRegions() {
+    if (!_initialized || !_bufferInitialized) return;
+    
+    for (int line = 0; line < LCD_HEIGHT; line++) {
+        if (_lineDirty[line]) {
+            // Write entire line if any char changed
+            _lcd.setCursor(0, line);
+            _lcd.print(_buffer[line]);
+            _lineDirty[line] = false;
+            
+            // Clear dirty flags for this line
+            for (int col = 0; col < LCD_WIDTH; col++) {
+                _charDirty[line][col] = false;
+            }
+        }
+    }
+}
+
+// debugPrintBuffer(): Debug helper to print buffer contents
+void LCDDisplay::debugPrintBuffer() {
+    Serial.println("=== LCD Buffer Contents ===");
+    for (int line = 0; line < LCD_HEIGHT; line++) {
+        Serial.print("Line "); Serial.print(line); Serial.print(": '");
+        Serial.print(_buffer[line]);
+        Serial.print("' Dirty: "); Serial.println(_lineDirty[line]);
+    }
+    Serial.println("==========================");
 }
 
 // clear(): Clears the entire LCD display
 void LCDDisplay::clear() {
     if (_initialized) {
         _lcd.clear();
-        _errorDisplayed = false; // Reset error state when clearing
+        clearBuffer(); // Clear buffer to match LCD
     }
 }
 

@@ -39,8 +39,10 @@ private:
     bool _initialized;
     uint8_t _address;
 
-    // Screen buffer system for optimization
-    char _screenBuffer[LCD_HEIGHT][LCD_WIDTH + 1]; // +1 for null terminator
+    // Smart buffer system for optimization - reduces flicker and eliminates clearing
+    char _buffer[LCD_HEIGHT][LCD_WIDTH + 1]; // +1 for null terminator
+    bool _lineDirty[LCD_HEIGHT];             // Track which lines changed
+    bool _charDirty[LCD_HEIGHT][LCD_WIDTH];  // Track which chars changed
     bool _bufferInitialized;
 
     // Custom characters (as members to be created once)
@@ -77,18 +79,14 @@ private:
     // For status icon blinking
     bool _statusBlinkState = false;
     unsigned long _lastBlinkTime = 0;
-    
-    // Error display state
-    bool _errorDisplayed = false;
-    unsigned long _errorStartTime = 0;
-    unsigned long _errorDuration = 3000; // 3 seconds default
 
-    // Private helper methods for buffer management
+    // Private helper methods for constrained area buffer management
     void initializeBuffer();
-    void updateBufferChar(uint8_t line, uint8_t col, char newChar);
-    void updateBufferString(uint8_t line, uint8_t col, const String& newString, uint8_t maxLength = LCD_WIDTH);
+    void updateBufferArea(uint8_t startLine, uint8_t endLine, uint8_t startCol, uint8_t endCol, const String& content);
+    void updateStatusArea(uint8_t line, char wifiChar, char syncChar);
     void clearBufferLine(uint8_t line);
     void clearBuffer();
+    void syncDirtyRegions(); // Sync only changed regions to LCD
     
 public:
     // Constructor: Takes the I2C address of the LCD
@@ -105,10 +103,6 @@ public:
     // Uses dedicated status real estate positions.
     void updateNetworkStatus(int wifiStatus, unsigned long lastNtpSync, unsigned long ntpSyncInterval);
 
-    // Displays an error message on the LCD with overlay capability.
-    // If overlay is true, preserves time/date and only shows error in available space.
-    void displayError(const String& errorMsg, bool overlay = false, unsigned long duration = 3000);
-
     // Prints a message to a specific line on the LCD, clearing the line first.
     void printLine(uint8_t line, const String& msg);
 
@@ -120,12 +114,6 @@ public:
 
     // Turns off the LCD backlight.
     void noBacklight();
-
-    // Utility method to check if error is currently being displayed
-    bool isErrorDisplayed() const { return _errorDisplayed; }
-
-    // Utility method to clear error display and restore normal display
-    void clearError();
 
     // Debug method to print current buffer state (for development)
     void debugPrintBuffer();
