@@ -70,34 +70,31 @@ void LCDDisplay::updateTimeAndDate(const RTCTime& currentTime) {
     int currentMonth = Month2int(currentTime.getMonth()); // Convert Month enum to 1-12 int
     int currentYear = currentTime.getYear();
 
-    // Update date display if day/month/year changed OR if this is the first update (to replace "Clock Running")
-    if (_lastDisplayedDay != currentDay || _lastDisplayedMonth != currentMonth || _lastDisplayedYear != currentYear || 
-        (_lastDisplayedDay == -1 && _lastDisplayedMonth == -1 && _lastDisplayedYear == -1)) {
-        _lcd.setCursor(DATE_START, 0); // Set cursor to date start position
-        char dateStr[15]; // Buffer for date string: "DD/MMM/YY WWW" (14 chars max)
-        
-        // Use RTC library's day calculation since it appears to be correct
-        int dayOfWeekInt = DayOfWeek2int(currentTime.getDayOfWeek(), true);
-        
-        // snprintf for safe string formatting
-        snprintf(dateStr, sizeof(dateStr), "%02d/%s/%02d %s", 
-                currentDay,
-                MONTH_NAMES[currentMonth - 1], // MONTH_NAMES is 0-indexed (Jan=0)
-                currentYear % 100, // Get last two digits of the year
-                DOW_ABBREV[dayOfWeekInt]); // Get abbreviated day of week
-        
-        // Ensure we don't exceed DATE_END boundary
-        String dateDisplay = String(dateStr);
-        if (dateDisplay.length() > (DATE_END - DATE_START + 1)) {
-            dateDisplay = dateDisplay.substring(0, DATE_END - DATE_START + 1);
-        }
-        _lcd.print(dateDisplay);
-        
-        // Update last displayed values
-        _lastDisplayedDay = currentDay;
-        _lastDisplayedMonth = currentMonth;
-        _lastDisplayedYear = currentYear;
+    // Always update date display to ensure "Clock Running" message gets replaced
+    _lcd.setCursor(DATE_START, 0); // Set cursor to date start position
+    char dateStr[15]; // Buffer for date string: "DD/MMM/YY WWW" (14 chars max)
+    
+    // Use RTC library's day calculation since it appears to be correct
+    int dayOfWeekInt = DayOfWeek2int(currentTime.getDayOfWeek(), true);
+    
+    // snprintf for safe string formatting
+    snprintf(dateStr, sizeof(dateStr), "%02d/%s/%02d %s", 
+            currentDay,
+            MONTH_NAMES[currentMonth - 1], // MONTH_NAMES is 0-indexed (Jan=0)
+            currentYear % 100, // Get last two digits of the year
+            DOW_ABBREV[dayOfWeekInt]); // Get abbreviated day of week
+    
+    // Ensure we don't exceed DATE_END boundary
+    String dateDisplay = String(dateStr);
+    if (dateDisplay.length() > (DATE_END - DATE_START + 1)) {
+        dateDisplay = dateDisplay.substring(0, DATE_END - DATE_START + 1);
     }
+    _lcd.print(dateDisplay);
+    
+    // Update last displayed values
+    _lastDisplayedDay = currentDay;
+    _lastDisplayedMonth = currentMonth;
+    _lastDisplayedYear = currentYear;
     
     // Update time display only if hour, minute, or second has changed
     if (_lastDisplayedHour != currentHour || _lastDisplayedMinute != currentMinute || _lastDisplayedSecond != currentSecond) {

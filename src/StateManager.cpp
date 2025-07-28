@@ -198,8 +198,9 @@ void StateManager::_runConnectingWiFiState() {
     
     // Timeout after 30 seconds
     if (millis() - _wifiConnectStartTime > 30000UL) {
-        setLastError("WiFi Timeout");
-        transitionTo(STATE_ERROR);
+        // Reset NTP sync counter and return to running state
+        _networkManager.resetNtpSyncCounter();
+        transitionTo(STATE_RUNNING);
     }
 }
 
@@ -233,13 +234,13 @@ void StateManager::_runRunningState() {
     
     // Check if periodic NTP sync is needed
     if (_networkManager.isNTPSyncNeeded()) {
-        transitionTo(STATE_SYNCING_TIME);
-    }
-    
-    // Check for network issues
-    if (!_networkManager.isWiFiConnected()) {
-        setLastError("WiFi Lost");
-        transitionTo(STATE_ERROR);
+        // Check WiFi status before attempting NTP sync
+        if (_networkManager.isWiFiConnected()) {
+            transitionTo(STATE_SYNCING_TIME);
+        } else {
+            // WiFi disconnected, try to reconnect first
+            transitionTo(STATE_CONNECTING_WIFI);
+        }
     }
 }
 

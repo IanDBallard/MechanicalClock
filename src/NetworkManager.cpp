@@ -656,6 +656,12 @@ bool NetworkManager::isNTPSyncNeeded() const {
     return (millis() - _lastNTPSyncTime >= _ntpSyncInterval);
 }
 
+// --- Reset NTP Sync Counter ---
+void NetworkManager::resetNtpSyncCounter() {
+    _lastNTPSyncTime = millis(); // Reset to current time, deferring sync for another interval
+    Serial.println("NTP sync counter reset - sync deferred for another interval");
+}
+
 // --- Helper methods for captive portal ---
 
 void NetworkManager::_handleRootRequest(WiFiClient client) {
