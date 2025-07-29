@@ -1,6 +1,7 @@
 #include "LCDDisplay.h"
 #include <Arduino.h> // For millis(), Serial.println()
 #include <stdio.h>   // For snprintf
+#include <string.h>  // For strncpy
 #include "TimeUtils.h" // Include TimeUtils for utility functions and arrays
 
 // LCDDisplay class implementation
@@ -260,9 +261,22 @@ void LCDDisplay::syncDirtyRegions() {
     
     for (int line = 0; line < LCD_HEIGHT; line++) {
         if (_lineDirty[line]) {
-            // Write entire line if any char changed
+            // Write only positions 0-14 to preserve status icons at position 15
             _lcd.setCursor(0, line);
-            _lcd.print(_buffer[line]);
+            
+            // Create a temporary string with only positions 0-14
+            char tempLine[16];
+            strncpy(tempLine, _buffer[line], 15);
+            tempLine[15] = '\0'; // Ensure null termination
+            
+            _lcd.print(tempLine);
+            
+            // Handle status icons separately if they're dirty
+            if (_charDirty[line][15]) {
+                _lcd.setCursor(15, line);
+                _lcd.print(_buffer[line][15]);
+            }
+            
             _lineDirty[line] = false;
             
             // Clear dirty flags for this line

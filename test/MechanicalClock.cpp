@@ -15,8 +15,8 @@ MechanicalClock::MechanicalClock(int stepPin, int dirPin, int enablePin, int ms1
       _currentClockTime(0),
       _lastStepperMoveTime(0)
 {
-    _stepsPerRevolution = 0;
-    _secondsPerStep = 0;
+    // Initialize with proper values immediately
+    _setMicrostepping(CURRENT_MICROSTEP);
 }
 
 void MechanicalClock::_enableStepperDriver() {

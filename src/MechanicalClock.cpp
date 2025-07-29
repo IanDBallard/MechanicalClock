@@ -11,12 +11,12 @@ MechanicalClock::MechanicalClock(int stepPin, int dirPin, int enablePin, int ms1
       _myStepper(AccelStepper::DRIVER, stepPin, dirPin),
       _activityLED(ledPin),
       _enablePin(enablePin), _ms1Pin(ms1Pin), _ms2Pin(ms2Pin), _ms3Pin(ms3Pin),
-                    _stepperIdleTimeout(5000),
-        _currentClockTime(0),
-        _lastStepperMoveTime(0)
+      _stepperIdleTimeout(5000),
+      _currentClockTime(0),
+      _lastStepperMoveTime(0)
 {
-    _stepsPerRevolution = 0;
-    _secondsPerStep = 0;
+    // Initialize with proper values immediately
+    _setMicrostepping(CURRENT_MICROSTEP);
 }
 
 void MechanicalClock::_enableStepperDriver() {
@@ -45,6 +45,9 @@ void MechanicalClock::_setMicrostepping(uint8_t mode) {
     
     _stepsPerRevolution = BASE_STEPS_PER_REV * microstepMultiplier;
     _secondsPerStep = 18 / microstepMultiplier; // 18 seconds per step for full stepping
+    // TODO: Consider implementing fractional accumulator to handle non-integer division results
+    // For microstepping modes > 2, this integer division loses precision (e.g., 18/4=4 instead of 4.5)
+    // Solution: Accumulate fractional error and add catch-up steps when error >= 1.0
 }
 
 void MechanicalClock::begin() {

@@ -20,7 +20,7 @@ StateManager stateManager(networkManager, lcdDisplay, mechanicalClock, RTC);
 // Test configuration
 const unsigned long TEST_DURATION_MS = 18000;  // 18 seconds real time
 const unsigned long CLOCK_ADVANCE_MS = 3600000; // 1 hour clock time
-const unsigned long UPDATE_INTERVAL_MS = 1000;  // Update every 1 second
+const unsigned long UPDATE_INTERVAL_MS = 100;  // Update every 100ms for smoother advancement
 
 unsigned long testStartTime = 0;
 unsigned long lastUpdateTime = 0;
@@ -33,7 +33,7 @@ void setup() {
     
     Serial.println("=== Clock Advance Test ===");
     Serial.println("Advances clock 1 hour in 18 seconds");
-    Serial.println("18 seconds real time = 1 second clock time");
+    Serial.println("1 second real time = 18 seconds clock time");
     Serial.println();
     
     // Initialize components
@@ -81,15 +81,15 @@ void loop() {
         }
     }
     
-    // Update every second
+    // Update every 100ms
     if (currentRealTime - lastUpdateTime >= UPDATE_INTERVAL_MS) {
         lastUpdateTime = currentRealTime;
         
         // Calculate how much clock time should advance
-        // 18 seconds real time = 1 second clock time
-        // So 1 second real time = 1/18 second clock time
-        unsigned long clockAdvanceSeconds = elapsedRealTime / 18; // Compress 18 seconds to 1 second
-        time_t newTestTime = initialTime + clockAdvanceSeconds;
+        // 1 second real time = 18 seconds clock time
+        // So each real second advances clock by 18 seconds
+        // With 100ms updates, each update advances by 1.8 seconds
+        time_t newTestTime = initialTime + (elapsedRealTime * 18);
         
         if (newTestTime != currentTestTime) {
             currentTestTime = newTestTime;
@@ -104,21 +104,23 @@ void loop() {
             // Update display
             lcdDisplay.updateTimeAndDate(currentRTC);
             
-            // Print progress
-            Serial.print("[");
-            Serial.print(elapsedRealTime / 1000);
-            Serial.print("s] -> [");
-            Serial.print(currentTestTime);
-            Serial.print("] -> [");
-            
-            // Format time for display
-            char timeStr[20];
-            snprintf(timeStr, sizeof(timeStr), "%02d:%02d:%02d", 
-                    currentRTC.getHours(), 
-                    currentRTC.getMinutes(), 
-                    currentRTC.getSeconds());
-            Serial.print(timeStr);
-            Serial.println("]");
+            // Print progress (only every second to avoid spam)
+            if (elapsedRealTime % 1000 < 100) {
+                Serial.print("[");
+                Serial.print(elapsedRealTime / 1000);
+                Serial.print("s] -> [");
+                Serial.print(currentTestTime);
+                Serial.print("] -> [");
+                
+                // Format time for display
+                char timeStr[20];
+                snprintf(timeStr, sizeof(timeStr), "%02d:%02d:%02d", 
+                        currentRTC.getHours(), 
+                        currentRTC.getMinutes(), 
+                        currentRTC.getSeconds());
+                Serial.print(timeStr);
+                Serial.println("]");
+            }
         }
     }
     
