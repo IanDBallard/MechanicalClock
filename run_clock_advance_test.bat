@@ -6,14 +6,14 @@ echo.
 
 REM Build the test
 echo Building Clock Advance Test...
-pio run -e uno_r4_wifi_test
+pio run -e uno_r4_wifi_clock_advance_test
 
 if %ERRORLEVEL% EQU 0 (
     echo.
     echo Build successful! Uploading to device...
     
     REM Upload the test
-    pio run -e uno_r4_wifi_test -t upload
+    pio run -e uno_r4_wifi_clock_advance_test -t upload
     
     if %ERRORLEVEL% EQU 0 (
         echo.
@@ -25,7 +25,7 @@ if %ERRORLEVEL% EQU 0 (
         echo.
         
         REM Start the monitor
-        pio device monitor --environment uno_r4_wifi_test
+        pio device monitor --environment uno_r4_wifi_clock_advance_test
     ) else (
         echo Upload failed!
         pause
