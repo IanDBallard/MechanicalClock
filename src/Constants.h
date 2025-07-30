@@ -9,6 +9,11 @@
 #define EEPROM_ADDRESS_WIFI_CREDENTIALS 4  // After initial time (4 bytes)
 #define EEPROM_ADDRESS_SYSTEM_STATE 100    // System configuration
 
+// EEPROM Addresses for Power Recovery
+#define EEPROM_ADDRESS_POWER_STATE 8         // Power-down state information
+#define EEPROM_ADDRESS_RECOVERY_FLAG 16      // Recovery validation flag
+#define EEPROM_ADDRESS_TEST_MODE 24          // Test mode flag for simulation
+
 // ============================================================================
 // HARDWARE CONSTANTS
 // ============================================================================
@@ -32,6 +37,20 @@
 #define NTP_SYNC_TIMEOUT 30000UL          // 30 seconds
 #define CONFIG_TIMEOUT 300000UL           // 5 minutes
 #define ERROR_RECOVERY_DELAY 5000UL       // 5 seconds
+
+// Power Recovery Constants
+#define POWER_RECOVERY_TIMEOUT 30000UL    // 30 seconds timeout for recovery
+#define MIN_VALID_POWER_DOWN_TIME 1672531200UL // Jan 1, 2023 - minimum valid timestamp
+#define MAX_VALID_POWER_DOWN_TIME 4102444800UL // Jan 1, 2100 - maximum valid timestamp
+
+// Power Recovery States
+#define POWER_STATE_RUNNING 0x01         // System was running normally
+#define POWER_STATE_ERROR 0x02           // System was in error state
+#define POWER_STATE_CONFIG 0x03          // System was in configuration
+#define POWER_STATE_TEST 0xFF            // Test mode simulation
+
+// Recovery Validation
+#define RECOVERY_VALIDATION_MAGIC 0xDEADBEEF // Magic number for validation
 
 // ============================================================================
 // NETWORK CONSTANTS

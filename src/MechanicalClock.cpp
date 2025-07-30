@@ -5,6 +5,14 @@
 #include "LCDDisplay.h" // Needed for LCDDisplay methods (though not directly called in update())
 #include "TimeUtils.h"  // For TimeUtils functions
 
+// Helper function to format time for debugging
+String formatTime(time_t unixTime) {
+    struct tm* timeinfo = localtime(&unixTime);
+    char buffer[20];
+    sprintf(buffer, "%02d:%02d:%02d", timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+    return String(buffer);
+}
+
 MechanicalClock::MechanicalClock(int stepPin, int dirPin, int enablePin, int ms1Pin, int ms2Pin, int ms3Pin, int ledPin,
                                  RTClock& rtcRef, LCDDisplay& lcdRef)
     : Clock(rtcRef, lcdRef),
@@ -62,26 +70,45 @@ void MechanicalClock::begin() {
     _myStepper.setAcceleration(2);
     _myStepper.setSpeed(5);
     
-    // Power recovery logic
-    time_t powerDownTime = 0;
-    EEPROM.get(EEPROM_ADDRESS_INITIAL_TIME, powerDownTime);
-    Serial.print("Power-down time from EEPROM: "); Serial.println(powerDownTime);
+    // Enhanced power recovery logic
+    Serial.println("=== POWER RECOVERY ANALYSIS ===");
     
-    if (powerDownTime != 0) {
-        Serial.println("Power-down time found - will calculate stepper adjustment after NTP sync");
-        // Clear the saved time immediately to avoid re-using it
-        time_t clearValue = 0;
-        EEPROM.put(EEPROM_ADDRESS_INITIAL_TIME, clearValue);
-        Serial.println("✓ Cleared saved power-down time from EEPROM.");
+    // Check if we have valid power recovery data
+    if (validatePowerRecoveryData()) {
+        time_t powerDownTime = getPowerDownTime();
+        uint8_t powerDownState = getPowerDownState();
+        bool testMode = isTestMode();
         
-        // Store the power-down time for use after NTP sync
-        _currentClockTime = powerDownTime;
+        Serial.print("Power-down time from EEPROM: "); Serial.println(powerDownTime);
+        Serial.print("Power-down state: "); Serial.println(powerDownState);
+        Serial.print("Test mode: "); Serial.println(testMode ? "YES" : "NO");
+        
+        if (powerDownTime != 0) {
+            Serial.println("✓ Valid power-down time found - will calculate stepper adjustment after NTP sync");
+            
+            // Clear the saved data immediately to avoid re-using it
+            clearPowerRecoveryData();
+            Serial.println("✓ Cleared saved power recovery data from EEPROM.");
+            
+            // Store the power-down time for use after NTP sync
+            _currentClockTime = powerDownTime;
+            
+            // If this was a test simulation, provide immediate feedback
+            if (testMode) {
+                Serial.println("=== TEST MODE DETECTED ===");
+                Serial.println("Power recovery simulation successful!");
+                Serial.println("Clock will adjust position after NTP sync.");
+            }
+        } else {
+            Serial.println("No power-down time found - will wait for NTP sync before calculating stepper position");
+            _currentClockTime = 0;
+        }
     } else {
-        Serial.println("No power-down time found - will wait for NTP sync before calculating stepper position");
-        // Don't calculate stepper movement yet - wait for NTP sync
-        // Just initialize the current time to 0 to indicate we need sync
+        Serial.println("No valid power recovery data found - starting fresh");
         _currentClockTime = 0;
     }
+    
+    Serial.println("=== POWER RECOVERY ANALYSIS COMPLETE ===");
     
     _activityLED.on();
     delay(200);
@@ -146,6 +173,19 @@ void MechanicalClock::updateCurrentTime() {
         Serial.print("[DEBUG] Steps needed (shortest path): "); Serial.println(stepsNeeded);
         
         if (stepsNeeded != 0) {
+            // DETAILED DEBUGGING FOR ANTICLOCKWISE MOVEMENTS
+            if (stepsNeeded < 0) {
+                Serial.println("*** ANTICLOCKWISE MOVEMENT DETECTED (Large Time Diff) ***");
+                Serial.print("Net Movement: "); Serial.print(stepsNeeded); Serial.println(" steps");
+                Serial.print("Distance in seconds: "); Serial.println(distance);
+                Serial.print("Current Clock Time: "); Serial.print(_currentClockTime);
+                Serial.print(" ("); Serial.print(formatTime(_currentClockTime)); Serial.println(")");
+                Serial.print("UTC Real Time: "); Serial.print(currentUTC);
+                Serial.print(" ("); Serial.print(formatTime(currentUTC)); Serial.println(")");
+                Serial.print("Time Difference: "); Serial.print(timeDiff); Serial.println(" seconds");
+                Serial.println("*** END ANTICLOCKWISE DEBUG ***");
+            }
+            
             _myStepper.move(_myStepper.distanceToGo() + stepsNeeded);
             _currentClockTime = currentUTC; // Set to exact target time
         }
@@ -163,7 +203,17 @@ void MechanicalClock::updateCurrentTime() {
             }
             
             if (stepsNeeded != 0) {
-                if (abs(stepsNeeded) > 1) { 
+                // DETAILED DEBUGGING FOR ANTICLOCKWISE MOVEMENTS
+                if (stepsNeeded < 0) {
+                    Serial.println("*** ANTICLOCKWISE MOVEMENT DETECTED (Normal) ***");
+                    Serial.print("Net Movement: "); Serial.print(stepsNeeded); Serial.println(" steps");
+                    Serial.print("Time Difference: "); Serial.print(timeDiff); Serial.println(" seconds");
+                    Serial.print("Current Clock Time: "); Serial.print(_currentClockTime);
+                    Serial.print(" ("); Serial.print(formatTime(_currentClockTime)); Serial.println(")");
+                    Serial.print("UTC Real Time: "); Serial.print(currentUTC);
+                    Serial.print(" ("); Serial.print(formatTime(currentUTC)); Serial.println(")");
+                    Serial.println("*** END ANTICLOCKWISE DEBUG ***");
+                } else if (abs(stepsNeeded) > 1) { 
                     Serial.print("[DEBUG] Normal movement - StepsNeeded: "); Serial.print(stepsNeeded);
                     Serial.print(", TimeDiff: "); Serial.println(timeDiff);
                 }

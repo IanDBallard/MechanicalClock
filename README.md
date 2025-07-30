@@ -85,6 +85,47 @@ pio run -e uno_r4_wifi_clock_advance_test
 ./run_tests.sh                    # Main test runner
 ./run_test_monitor.sh             # Monitor test output
 ./run_clock_advance_test.sh       # Clock advance testing
+./run_power_recovery_test.sh      # Power recovery testing (NEW!)
+```
+
+### **Power Recovery Testing (NEW!)**
+
+The improved power recovery system can be tested without physical USB disconnection:
+
+```bash
+# Windows
+run_power_recovery_test.bat
+
+# Linux/Mac
+./run_power_recovery_test.sh
+
+# Manual steps
+pio run -e uno_r4_wifi_test --target upload --upload-port COM5
+pio device monitor --port COM5
+```
+
+**Features:**
+- ✅ **Software simulation** of power-off events
+- ✅ **Data validation** with magic numbers and range checking
+- ✅ **Test mode detection** for simulation vs. real power loss
+- ✅ **Comprehensive debugging** output during recovery
+
+**Test Output Example:**
+```
+=== POWER RECOVERY TEST SUITE ===
+Testing improved power recovery system...
+
+Testing power-off simulation...
+  ✓ Power-off simulation test passed
+
+Testing power recovery validation...
+  ✓ Power recovery validation test passed
+
+Testing power recovery process...
+  ✓ Power recovery process test passed
+
+=== ALL TESTS COMPLETE ===
+Power recovery testing finished!
 ```
 
 ## 🔧 Key Features
