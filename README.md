@@ -173,7 +173,21 @@ The project supports multiple build configurations:
 
 ## 📄 License
 
-This project is open source. See the license file for details.
+This project is licensed under the **GNU General Public License v3.0** (GPL-3.0).
+
+This means you are free to:
+- ✅ **Use** the software for any purpose
+- ✅ **Study** how the program works and modify it
+- ✅ **Redistribute** copies to help others
+- ✅ **Improve** the program and release your improvements
+
+**Requirements:**
+- Any derivative work must also be licensed under GPL-3.0
+- Source code must be made available when distributing
+- Changes must be documented
+- Copyright and license notices must be preserved
+
+See the [LICENSE](LICENSE) file for the complete terms.
 
 ## 🆘 Support
 
